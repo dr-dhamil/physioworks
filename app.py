@@ -54,19 +54,17 @@ except Exception:
 st.sidebar.markdown("---")
 
 # --- SUPABASE CONNECTION SETUP ---
-# Replace with your actual Supabase URL & Anon Key from Project Settings > API
-SUPABASE_URL = "https://bicpyvfotfqoftpppatd.supabase.co"
-SUPABASE_KEY = "sb_publishable_FK0NBVBpOG-Ek9BOIqQUjQ_1Jb-fOgW"
+SUPABASE_URL = "https://your-project-id.supabase.co"
+SUPABASE_KEY = "your-anon-public-key-here"
 
 supabase = None
 try:
-  if SUPABASE_URL != "YOUR_SUPABASE_URL":
+  if SUPABASE_URL != "https://your-project-id.supabase.co":
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
     st.sidebar.success("✅ Connected to Supabase Database!")
   else:
     st.sidebar.warning(
-        "ℹ️ Running in local memory mode. Add your Supabase URL & Key in"
-        " `app.py` for live sync."
+        "ℹ️ Running in local memory mode. Update Supabase URL & Key in `app.py`."
     )
 except Exception as e:
   st.sidebar.error(f"Supabase connection error: {e}")
@@ -136,27 +134,27 @@ if menu == "New Patient Registration":
     submitted = st.form_submit_button("Register Patient")
 
     if submitted and name and phone:
-      patients_df = get_data("Patients")
+      patients_df = get_data("patients")
       counter = len(patients_df) + 1 if not patients_df.empty else 1
       patient_id = f"PW{datetime.datetime.now().strftime('%m%y')}{counter:03d}"
 
       patient_dict = {
-          "Patient_ID": patient_id,
-          "Name": name,
-          "Email": email,
-          "Gender": gender,
-          "Phone": phone,
-          "Medical_History": med_history,
-          "Registration_Date": str(datetime.date.today()),
+          "patient_id": patient_id,
+          "name": name,
+          "email": email,
+          "gender": gender,
+          "phone": phone,
+          "medical_history": med_history,
+          "registration_date": str(datetime.date.today()),
       }
 
-      save_data("Patients", patient_dict)
+      save_data("patients", patient_dict)
       st.success(
           f"Patient registered successfully & saved to Supabase! Generated ID:"
           f" **{patient_id}**"
       )
 
-  patients_display = get_data("Patients")
+  patients_display = get_data("patients")
   if not patients_display.empty:
     st.subheader("Registered Patients Directory")
     st.dataframe(patients_display, use_container_width=True, hide_index=True)
@@ -165,11 +163,13 @@ if menu == "New Patient Registration":
 elif menu == "Comprehensive Clinical Assessment":
   st.header("Step-by-Step Anatomical Assessment Protocols")
 
-  patients_df = get_data("Patients")
-  if patients_df.empty or "Patient_ID" not in patients_df.columns:
+  patients_df = get_data("patients")
+  id_col = "patient_id" if "patient_id" in patients_df.columns else "Patient_ID"
+
+  if patients_df.empty or id_col not in patients_df.columns:
     st.warning("Please register at least one patient first.")
   else:
-    patient_list = patients_df["Patient_ID"].tolist()
+    patient_list = patients_df[id_col].tolist()
     selected_patient = st.selectbox("Select Patient ID & Name", patient_list)
 
     with st.form("assessment_form"):
@@ -350,20 +350,20 @@ elif menu == "Comprehensive Clinical Assessment":
       if save_assessment:
         assessment_id = f"ASM-{datetime.datetime.now().strftime('%Y%m%d%H%M')}"
         assessment_dict = {
-            "Assessment_ID": assessment_id,
-            "Patient_ID": selected_patient,
-            "Body_Parts": ", ".join(body_parts),
-            "VAS_Score": vas_score,
-            "Assessment_Details": (
+            "assessment_id": assessment_id,
+            "patient_id": selected_patient,
+            "body_parts": ", ".join(body_parts),
+            "vas_score": vas_score,
+            "assessment_details": (
                 f"MMT: {mmt_grade} | Details: {str(assessment_details_dict)}"
             ),
-            "Suggested_Treatment": " | ".join(suggested_treatments),
-            "Suggested_Duration": f"{suggested_time} Sessions",
-            "Therapist": therapist,
-            "Date": str(datetime.date.today()),
+            "suggested_treatment": " | ".join(suggested_treatments),
+            "suggested_duration": f"{suggested_time} Sessions",
+            "therapist": therapist,
+            "date": str(datetime.date.today()),
         }
 
-        save_data("Assessments", assessment_dict)
+        save_data("assessments", assessment_dict)
         st.success(
             "Assessment protocols saved and synced to Supabase for"
             f" **{selected_patient}**!"
@@ -373,11 +373,13 @@ elif menu == "Comprehensive Clinical Assessment":
 elif menu == "Daily Treatment Log":
   st.header("Daily Treatment Provided & Status Update")
 
-  patients_df = get_data("Patients")
-  if patients_df.empty or "Patient_ID" not in patients_df.columns:
+  patients_df = get_data("patients")
+  id_col = "patient_id" if "patient_id" in patients_df.columns else "Patient_ID"
+
+  if patients_df.empty or id_col not in patients_df.columns:
     st.warning("No patients found in database.")
   else:
-    patient_list = patients_df["Patient_ID"].tolist()
+    patient_list = patients_df[id_col].tolist()
     log_patient = st.selectbox("Select Patient ID", patient_list, key="log_p")
 
     with st.form("daily_log_form"):
@@ -393,13 +395,13 @@ elif menu == "Daily Treatment Log":
       submit_log = st.form_submit_button("Save Daily Log")
       if submit_log:
         log_dict = {
-            "Patient_ID": log_patient,
-            "Session_Date": str(log_date),
-            "Treatment_Given": treatment_given,
-            "Current_VAS": current_vas,
-            "Notes": notes,
+            "patient_id": log_patient,
+            "session_date": str(log_date),
+            "treatment_given": treatment_given,
+            "current_vas": current_vas,
+            "notes": notes,
         }
-        save_data("Daily_Logs", log_dict)
+        save_data("daily_logs", log_dict)
         st.success(
             "Daily treatment log saved and synced to Supabase database!"
         )
@@ -408,20 +410,28 @@ elif menu == "Daily Treatment Log":
 elif menu == "Patient Progress Dashboard":
   st.header("Patient Improvement & Progress Analytics")
 
-  patients_df = get_data("Patients")
-  if patients_df.empty or "Patient_ID" not in patients_df.columns:
+  patients_df = get_data("patients")
+  id_col = "patient_id" if "patient_id" in patients_df.columns else "Patient_ID"
+
+  if patients_df.empty or id_col not in patients_df.columns:
     st.warning("No patient records available for charts.")
   else:
-    patient_list = patients_df["Patient_ID"].tolist()
+    patient_list = patients_df[id_col].tolist()
     dash_patient = st.selectbox(
         "Select Patient ID for Graph", patient_list, key="dash_p"
     )
 
-    logs_df = get_data("Daily_Logs")
-    if logs_df.empty or "Patient_ID" not in logs_df.columns:
+    logs_df = get_data("daily_logs")
+    date_col = (
+        "session_date" if "session_date" in logs_df.columns else "Session_Date"
+    )
+    pat_col = "patient_id" if "patient_id" in logs_df.columns else "Patient_ID"
+    vas_col = "current_vas" if "current_vas" in logs_df.columns else "Current_VAS"
+
+    if logs_df.empty or pat_col not in logs_df.columns:
       st.info("No daily logs recorded yet for this patient.")
     else:
-      patient_logs = logs_df[logs_df["Patient_ID"] == dash_patient]
+      patient_logs = logs_df[logs_df[pat_col] == dash_patient]
 
       if patient_logs.empty:
         st.info("No daily logs recorded yet for this patient.")
@@ -429,13 +439,13 @@ elif menu == "Patient Progress Dashboard":
         st.subheader("Pain Reduction Over Time (VAS Score Trend)")
         fig = px.line(
             patient_logs,
-            x="Session_Date",
-            y="Current_VAS",
+            x=date_col,
+            y=vas_col,
             markers=True,
             title=f"Improvement Graph for Patient: {dash_patient}",
             labels={
-                "Session_Date": "Date of Session",
-                "Current_VAS": "VAS Pain Score (0-10)",
+                date_col: "Date of Session",
+                vas_col: "VAS Pain Score (0-10)",
             },
         )
         st.plotly_chart(fig, use_container_width=True)
