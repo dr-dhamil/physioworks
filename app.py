@@ -13,7 +13,6 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* Primary Color Theme matching the clinic logo */
     :root {
         --primary-color: #F47920;
         --secondary-color: #1B365D;
@@ -22,7 +21,6 @@ st.markdown(
     .stApp {
         background-color: #F8F9FA;
     }
-    /* Sidebar styling */
     [data-testid="stSidebar"] {
         background-color: #1B365D;
         color: white;
@@ -30,11 +28,9 @@ st.markdown(
     [data-testid="stSidebar"] .stMarkdown, [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stSelectbox div {
         color: white !important;
     }
-    /* Headers */
     h1, h2, h3 {
         color: #1B365D;
     }
-    /* Buttons */
     .stButton>button {
         background-color: #F47920;
         color: white;
@@ -52,9 +48,7 @@ st.markdown(
 )
 
 # --- SIDEBAR LOGO & BRANDING ---
-st.sidebar.image(
-    "image_500b64.jpg", use_column_width=True
-)  # Displays your clinic logo
+st.sidebar.image("image_500b64.jpg", use_column_width=True)
 st.sidebar.markdown("---")
 
 
@@ -81,10 +75,8 @@ db_sheet = connect_to_sheets()
 if db_sheet is None:
   st.sidebar.warning(
       "⚠️ Live Google Sheet not connected. Running in local state memory mode."
-      " (Ensure `credentials.json` is uploaded)."
   )
 
-# Navigation Menu
 menu = st.sidebar.selectbox(
     "Clinic Navigation",
     [
@@ -96,7 +88,6 @@ menu = st.sidebar.selectbox(
 )
 
 
-# Helper function to fetch data safely
 def get_data(tab_name):
   if db_sheet:
     try:
@@ -122,4 +113,4 @@ def save_data(tab_name, new_row_df):
     if tab_name not in st.session_state:
       st.session_state[tab_name] = pd.DataFrame()
     st.session_state[tab_name] = pd.concat(
-        [st.session_state[tab_name], new_row_df], ignore
+        [st.session_state[tab_name], new_row_df], ignore_index=True
