@@ -15,7 +15,7 @@ menu = st.sidebar.selectbox(
     "Navigation",
     [
         "New Patient Registration",
-        "Clinical Assessment & Protocols",
+        "Comprehensive Clinical Assessment",
         "Daily Treatment Log",
         "Patient Progress Dashboard",
     ],
@@ -36,6 +36,7 @@ if "assessments" not in st.session_state:
           "VAS_Score",
           "Assessment_Details",
           "Suggested_Treatment",
+          "Suggested_Duration",
           "Therapist",
           "Date",
       ]
@@ -96,9 +97,9 @@ if menu == "New Patient Registration":
         st.session_state.patients, use_container_width=True, hide_index=True
     )
 
-# --- 2. CLINICAL ASSESSMENT & BODY-PART CRITERIA ---
-elif menu == "Clinical Assessment & Protocols":
-  st.header("Detailed Step-by-Step Clinical Assessment")
+# --- 2. COMPREHENSIVE CLINICAL ASSESSMENT & PROTOCOLS ---
+elif menu == "Comprehensive Clinical Assessment":
+  st.header("Step-by-Step Anatomical Assessment Protocols")
 
   if st.session_state.patients.empty:
     st.warning("Please register at least one patient first.")
@@ -107,151 +108,200 @@ elif menu == "Clinical Assessment & Protocols":
     selected_patient = st.selectbox("Select Patient ID & Name", patient_list)
 
     with st.form("assessment_form"):
-      st.subheader("1. Select Affected Body Part(s)")
+      st.subheader("1. Affected Body Region Selection (Can select multiple)")
       body_parts = st.multiselect(
-          "Anatomical Regions:",
+          "Select Body Part(s):",
           [
               "Cervical Spine (Neck)",
               "Lumbar Spine (Lower Back)",
-              "Shoulder",
-              "Knee",
-              "Wrist / Hand",
-              "Ankle / Foot",
+              "Shoulder Complex",
+              "Knee Joint",
+              "Wrist & Hand",
+              "Ankle & Foot",
           ],
       )
 
-      st.subheader("2. Subjective Pain Assessment")
-      vas_score = st.slider("VAS Pain Scale (0 = No Pain, 10 = Max Pain)", 0, 10, 6)
+      st.subheader("2. Subjective & General Scoring")
+      vas_score = st.slider("VAS Pain Scale (0 = No Pain, 10 = Max Pain)", 0, 10, 5)
 
-      # Dynamic criteria inputs based on selected body parts
-      rom_data_entered = {}
-      special_tests_entered = {}
+      assessment_details_dict = {}
+      suggested_treatments = []
 
+      # --- CERVICAL SPINE ---
       if "Cervical Spine (Neck)" in body_parts:
-        st.markdown("### 🔹 Cervical Spine Assessment Criteria")
-        rom_data_entered["Cervical_ROM"] = st.text_input(
-            "Cervical ROM (Flexion, Extension, Rotation, Lateral Flexion in degrees)"
+        st.markdown("### 🔹 Cervical Spine Assessment")
+        flex = st.text_input(
+            "Cervical Flexion / Extension (Norm: 0-45° / 0-45°)"
         )
-        special_tests_entered["Cervical_Tests"] = st.multiselect(
+        lat = st.text_input(
+            "Cervical Lateral Flexion & Rotation (Norm: 0-45° / 0-80°)"
+        )
+        c_tests = st.multiselect(
             "Cervical Special Tests",
             [
-                "Spurling's Test",
+                "Spurling’s Test",
                 "Cervical Distraction Test",
                 "Bakody Sign (Shoulder Abduction Test)",
             ],
         )
+        assessment_details_dict["Cervical"] = {
+            "ROM": f"Flex/Ext: {flex}, Lat/Rot: {lat}",
+            "Tests": c_tests,
+        }
+        suggested_treatments.append(
+            "Cervical Traction (15 mins) + TENS + Ergonomic Posture Correction"
+        )
 
+      # --- LUMBAR SPINE ---
       if "Lumbar Spine (Lower Back)" in body_parts:
-        st.markdown("### 🔹 Lumbar Spine Assessment Criteria")
-        rom_data_entered["Lumbar_ROM"] = st.text_input(
-            "Lumbar ROM & Schober's Test Findings"
+        st.markdown("### 🔹 Lumbar Spine Assessment")
+        lum_rom = st.text_input(
+            "Lumbar ROM (Forward Flexion, Extension, Side Flexion)"
         )
-        special_tests_entered["Lumbar_Tests"] = st.multiselect(
+        l_tests = st.multiselect(
             "Lumbar Special Tests",
-            ["Straight Leg Raise (SLR)", "Slump Test", "FABER Test"],
+            ["Straight Leg Raise (SLR)", "Slump Test", "FABER (Patrick's) Test"],
+        )
+        assessment_details_dict["Lumbar"] = {
+            "ROM": lum_rom,
+            "Tests": l_tests,
+        }
+        suggested_treatments.append(
+            "IFT + Short Wave Diathermy (SWD) + Core Stabilization Exercises"
         )
 
-      if "Shoulder" in body_parts:
-        st.markdown("### 🔹 Shoulder Assessment Criteria")
-        rom_data_entered["Shoulder_ROM"] = st.text_input(
-            "Shoulder Active/Passive ROM (Flexion, Abduction, External/Internal"
-            " Rotation)"
+      # --- SHOULDER COMPLEX ---
+      if "Shoulder Complex" in body_parts:
+        st.markdown("### 🔹 Shoulder Complex Assessment")
+        sh_rom = st.text_input(
+            "Shoulder ROM (Flexion 0-180°, Abduction 0-180°, Rotations)"
         )
-        special_tests_entered["Shoulder_Tests"] = st.multiselect(
+        sh_tests = st.multiselect(
             "Shoulder Special Tests",
             [
                 "Neer Test",
                 "Hawkins-Kennedy Test",
                 "Empty Can (Jobe) Test",
-                "Apprehension Test",
+                "Apprehension & Relocation Test",
             ],
         )
-
-      if "Knee" in body_parts:
-        st.markdown("### 🔹 Knee Assessment Criteria")
-        rom_data_entered["Knee_ROM"] = st.text_input(
-            "Knee Flexion / Extension Range (degrees)"
+        assessment_details_dict["Shoulder"] = {
+            "ROM": sh_rom,
+            "Tests": sh_tests,
+        }
+        suggested_treatments.append(
+            "Ultrasound Therapy + Pendular Exercises + Rotator Cuff Strengthening"
         )
-        special_tests_entered["Knee_Tests"] = st.multiselect(
+
+      # --- KNEE JOINT ---
+      if "Knee Joint" in body_parts:
+        st.markdown("### 🔹 Knee Joint Assessment")
+        kn_rom = st.text_input(
+            "Knee ROM (Flexion Norm: 0-140°, Extension Norm: 0°)"
+        )
+        kn_tests = st.multiselect(
             "Knee Special Tests",
             [
                 "Lachman Test",
                 "Anterior Drawer Test",
+                "Posterior Drawer Test",
                 "McMurray Test",
-                "Valgus/Varus Stress Test",
+                "Valgus / Varus Stress Test",
             ],
         )
-
-      mmt_grade = st.selectbox(
-          "Manual Muscle Testing (MMT) General Grade",
-          [
-              "Grade 5 (Normal - Full ROM against gravity & max resistance)",
-              "Grade 4 (Good - Full ROM against moderate resistance)",
-              "Grade 3 (Fair - Full ROM against gravity only)",
-              "Grade 2 (Poor - ROM with gravity eliminated)",
-              "Grade 1 (Trace - Flicker of movement)",
-              "Grade 0 (Zero - No contraction)",
-          ],
-      )
-
-      st.subheader("3. Suggestive Treatment & Duration")
-      suggested_treatments = []
-      if "Cervical Spine (Neck)" in body_parts:
-        suggested_treatments.append(
-            "Cervical Traction (15 mins) + TENS + Ergonomic Posture Training"
-        )
-      if "Lumbar Spine (Lower Back)" in body_parts:
-        suggested_treatments.append(
-            "IFT + Short Wave Diathermy (SWD) + Core Stabilization Exercises"
-        )
-      if "Shoulder" in body_parts:
-        suggested_treatments.append(
-            "Ultrasound Therapy + Pendular Exercises + Rotator Cuff Strengthening"
-        )
-      if "Knee" in body_parts:
+        assessment_details_dict["Knee"] = {"ROM": kn_rom, "Tests": kn_tests}
         suggested_treatments.append(
             "Short Wave Diathermy / IFT + Quadriceps Strengthening + Patellar"
             " Mobilization"
         )
 
-      if not suggested_treatments:
+      # --- WRIST & HAND ---
+      if "Wrist & Hand" in body_parts:
+        st.markdown("### 🔹 Wrist & Hand Assessment")
+        wr_rom = st.text_input(
+            "Wrist ROM (Flexion 0-80°, Extension 0-70°, Deviations)"
+        )
+        wr_tests = st.multiselect(
+            "Wrist Special Tests",
+            ["Phalen’s Test", "Tinel’s Sign", "Finkelstein’s Test"],
+        )
+        assessment_details_dict["Wrist"] = {"ROM": wr_rom, "Tests": wr_tests}
         suggested_treatments.append(
-            "General Electrotherapy Modality & Joint Mobilization"
+            "Wax Bath Therapy / Ultrasound + Gentle Joint Mobilization & Ergonomics"
         )
 
-      st.info(
-          f"**🤖 Suggestive Protocols:** {', '.join(suggested_treatments)}"
+      # --- ANKLE & FOOT ---
+      if "Ankle & Foot" in body_parts:
+        st.markdown("### 🔹 Ankle & Foot Assessment")
+        an_rom = st.text_input(
+            "Ankle ROM (Dorsiflexion 0-20°, Plantarflexion 0-50°)"
+        )
+        an_tests = st.multiselect(
+            "Ankle Special Tests",
+            [
+                "Anterior Drawer Test (ATFL)",
+                "Squeeze Test (Syndesmosis)",
+                "Thompson Test (Achilles Tendon)",
+            ],
+        )
+        assessment_details_dict["Ankle"] = {"ROM": an_rom, "Tests": an_tests}
+        suggested_treatments.append(
+            "Contrast Bath / TENS + Proprioceptive & Balance Training"
+        )
+
+      st.markdown("### 🔹 General Manual Muscle Testing (MMT)")
+      mmt_grade = st.selectbox(
+          "Overall MMT Grading",
+          [
+              "Grade 5 (Normal - Full ROM against max resistance)",
+              "Grade 4 (Good - Full ROM against moderate resistance)",
+              "Grade 3 (Fair - Full ROM against gravity only)",
+              "Grade 2 (Poor - ROM with gravity eliminated)",
+              "Grade 1 (Trace - Flicker of contraction)",
+              "Grade 0 (Zero - No movement)",
+          ],
       )
-      suggested_sessions = st.number_input(
+
+      if not suggested_treatments:
+        suggested_treatments.append(
+            "General Electrotherapy & Soft Tissue Mobilization"
+        )
+
+      st.subheader("3. Suggestive Treatment & Duration")
+      st.info(f"**🤖 Suggested Modalities:** {', '.join(suggested_treatments)}")
+      suggested_time = st.number_input(
           "Suggested Total Treatment Sessions", min_value=1, value=10
       )
       therapist = st.selectbox(
           "Assign to Therapist",
-          ["Dr. Geetanjali", "Dr. Rohan", "Dr. Senior Resident"],
+          ["Dr. Geetanjali", "Dr. Rohan", "Dr. Senior Consultant"],
       )
 
-      save_btn = st.form_submit_button("Save Assessment Criteria & Protocols")
-      if save_btn:
+      save_assessment = st.form_submit_button(
+          "Save Assessment & Protocols to Database"
+      )
+      if save_assessment:
         assessment_id = f"ASM-{datetime.datetime.now().strftime('%Y%m%d%H%M')}"
-        assessment_summary = f"MMT: {mmt_grade} | ROM: {rom_data_entered} | Tests:"
-        f" {special_tests_entered}"
-
-        new_assessment = pd.DataFrame([{
+        new_record = pd.DataFrame([{
             "Assessment_ID": assessment_id,
             "Patient_ID": selected_patient,
             "Body_Parts": ", ".join(body_parts),
             "VAS_Score": vas_score,
-            "Assessment_Details": assessment_summary,
+            "Assessment_Details": (
+                f"MMT: {mmt_grade} | Details: {str(assessment_details_dict)}"
+            ),
             "Suggested_Treatment": " | ".join(suggested_treatments),
+            "Suggested_Duration": f"{suggested_time} Sessions",
             "Therapist": therapist,
             "Date": str(datetime.date.today()),
         }])
+
         st.session_state.assessments = pd.concat(
-            [st.session_state.assessments, new_assessment], ignore_index=True
+            [st.session_state.assessments, new_record], ignore_index=True
         )
         st.success(
-            "Comprehensive body assessment saved successfully and protocol"
-            " assigned!"
+            "Assessment protocols saved successfully and assigned to"
+            f" {therapist}!"
         )
 
 # --- 3. DAILY TREATMENT LOG ---
