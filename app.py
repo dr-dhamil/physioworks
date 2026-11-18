@@ -55,7 +55,7 @@ st.sidebar.markdown("---")
 
 # --- SUPABASE CONNECTION SETUP ---
 # Replace with your actual Supabase URL & Anon Key from Project Settings > API
-SUPABASE_URL = "bicpyvfotfqoftpppatd"
+SUPABASE_URL = "https://bicpyvfotfqoftpppatd.supabase.co"
 SUPABASE_KEY = "sb_publishable_FK0NBVBpOG-Ek9BOIqQUjQ_1Jb-fOgW"
 
 supabase = None
