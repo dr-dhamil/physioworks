@@ -463,7 +463,8 @@ elif menu == "Comprehensive Clinical Assessment":
           "Save Assessment & Protocols to Database"
       )
       if save_assessment:
-        assessment_id = f"ASM-{datetime.datetime.now().strftime('%Y%m%d%H%M')}"
+        # Added seconds (%S) to ensure unique IDs every time
+        assessment_id = f"ASM-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
         assessment_dict = {
             "assessment_id": assessment_id,
             "patient_id": selected_patient,
@@ -485,7 +486,6 @@ elif menu == "Comprehensive Clinical Assessment":
             "Comprehensive assessment protocol saved and synced to Supabase"
             f" for **{selected_patient}**!"
         )
-
 # --- 3. DAILY TREATMENT LOG ---
 elif menu == "Daily Treatment Log":
   st.header("Daily Treatment Provided & Status Update")
