@@ -54,8 +54,9 @@ except Exception:
 st.sidebar.markdown("---")
 
 # --- SUPABASE CONNECTION SETUP ---
-SUPABASE_URL = "https://your-project-id.supabase.co"
-SUPABASE_KEY = "your-anon-public-key-here"
+SUPABASE_URL = "https://bicpyvfotfqoftpppatd.supabase.co"
+SUPABASE_KEY = "sb_publishable_FK0NBVBpOG-Ek9BOIqQUjQ_1Jb-fOgW"
+
 
 supabase = None
 try:
