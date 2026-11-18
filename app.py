@@ -52,8 +52,7 @@ except Exception:
   st.sidebar.info("Logo image `image_500b64.jpg` loading...")
 st.sidebar.markdown("---")
 
-# --- GOOGLE SHEETS & STORAGE CONNECTION SETUP ---
-# To use live Google Sheets, we initialize session state fallback and optional gspread
+# --- INITIALIZE DATABASE STORAGE ---
 if "patients" not in st.session_state:
   st.session_state.patients = pd.DataFrame(
       columns=[
@@ -91,28 +90,6 @@ if "daily_logs" not in st.session_state:
       ]
   )
 
-# Try connecting to gspread if secrets/credentials exist
-db_sheet = None
-try:
-  import gspread
-  from oauth2client.service_account import ServiceAccountCredentials
-
-  scope = [
-      "https://www.spreadsheets.google.com/feeds",
-      "https://www.googleapis.com/auth/drive",
-  ]
-  creds = ServiceAccountCredentials.from_json_keyfile_name(
-      "credentials.json", scope
-  )
-  client = gspread.authorize(creds)
-  db_sheet = client.open("Dr_Geetanjalis_PhysioWorks_Live_DB")
-  st.sidebar.success("✅ Connected to Google Sheets DB!")
-except Exception:
-  st.sidebar.warning(
-      "ℹ️ Running in cloud session state mode (Upload `credentials.json` to"
-      " Streamlit secrets if live sheet sync is needed)."
-  )
-
 menu = st.sidebar.selectbox(
     "Clinic Navigation",
     [
@@ -125,26 +102,10 @@ menu = st.sidebar.selectbox(
 
 
 def get_data(tab_name):
-  if db_sheet:
-    try:
-      worksheet = db_sheet.worksheet(tab_name)
-      data = worksheet.get_all_records()
-      if data:
-        return pd.DataFrame(data)
-    except Exception:
-      pass
   return st.session_state.get(tab_name, pd.DataFrame())
 
 
 def save_data(tab_name, new_row_df):
-  if db_sheet:
-    try:
-      worksheet = db_sheet.worksheet(tab_name)
-      worksheet.append_row(
-          [str(val) for val in new_row_df.values.tolist()[0]]
-      )
-    except Exception:
-      pass
   if tab_name not in st.session_state:
     st.session_state[tab_name] = pd.DataFrame()
   st.session_state[tab_name] = pd.concat(
@@ -232,8 +193,6 @@ elif menu == "Comprehensive Clinical Assessment":
 
       assessment_details_dict = {}
       suggested_treatments = []
-
-      # Robust matching for body parts
       bp_str = "".join(body_parts)
 
       if "Cervical" in bp_str:
@@ -408,8 +367,8 @@ elif menu == "Comprehensive Clinical Assessment":
 
         save_data("Assessments", new_record)
         st.success(
-            "Assessment protocols saved successfully and synced for"
-            f" {selected_patient}!"
+            "Assessment protocols saved successfully for "
+            f"**{selected_patient}**!"
         )
 
 # --- 3. DAILY TREATMENT LOG ---
@@ -443,7 +402,7 @@ elif menu == "Daily Treatment Log":
             "Notes": notes,
         }])
         save_data("Daily_Logs", new_log)
-        st.success("Daily treatment log saved and synced to database!")
+        st.success("Daily treatment log saved successfully!")
 
 # --- 4. PATIENT PROGRESS DASHBOARD ---
 elif menu == "Patient Progress Dashboard":
