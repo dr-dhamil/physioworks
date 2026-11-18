@@ -57,7 +57,6 @@ st.sidebar.markdown("---")
 SUPABASE_URL = "https://bicpyvfotfqoftpppatd.supabase.co"
 SUPABASE_KEY = "sb_publishable_FK0NBVBpOG-Ek9BOIqQUjQ_1Jb-fOgW"
 
-
 supabase = None
 try:
   if SUPABASE_URL != "https://your-project-id.supabase.co":
@@ -118,7 +117,7 @@ st.markdown("---")
 
 # --- 1. PATIENT REGISTRATION & AUTO-ID ---
 if menu == "New Patient Registration":
-  st.header("Patient Registration & Auto-ID Generation")
+  st.header("Patient Registration & Universal Assessment Framework")
 
   with st.form("reg_form"):
     col1, col2 = st.columns(2)
@@ -126,10 +125,14 @@ if menu == "New Patient Registration":
       name = st.text_input("Patient Full Name")
       email = st.text_input("Email Address")
       gender = st.selectbox("Gender", ["Female", "Male", "Other"])
+      occupation = st.text_input("Occupation & Activity/Sport Demands")
     with col2:
       phone = st.text_input("Phone Number")
+      dominant_side = st.selectbox("Dominant Side", ["Right", "Left", "Mixed"])
+      referral = st.text_input("Referral Source")
       med_history = st.text_area(
-          "Medical History & Flags (Diabetes, Hypertension, Surgeries)"
+          "Medical History & Red Flag Screening (Comorbidities, Surgeries,"
+          " Anticoagulants, Pregnancy)"
       )
 
     submitted = st.form_submit_button("Register Patient")
@@ -151,7 +154,7 @@ if menu == "New Patient Registration":
 
       save_data("patients", patient_dict)
       st.success(
-          f"Patient registered successfully & saved to Supabase! Generated ID:"
+          f"Patient registered successfully & saved! Generated ID:"
           f" **{patient_id}**"
       )
 
@@ -162,7 +165,7 @@ if menu == "New Patient Registration":
 
 # --- 2. COMPREHENSIVE CLINICAL ASSESSMENT & PROTOCOLS ---
 elif menu == "Comprehensive Clinical Assessment":
-  st.header("Step-by-Step Anatomical Assessment Protocols")
+  st.header("Comprehensive Anatomical Assessment Protocols")
 
   patients_df = get_data("patients")
   id_col = "patient_id" if "patient_id" in patients_df.columns else "Patient_ID"
@@ -174,82 +177,126 @@ elif menu == "Comprehensive Clinical Assessment":
     selected_patient = st.selectbox("Select Patient ID & Name", patient_list)
 
     with st.form("assessment_form"):
-      st.subheader("1. Affected Body Region Selection (Can select multiple)")
+      st.subheader("1. Affected Body Region Selection")
       body_parts = st.multiselect(
           "Select Body Part(s):",
           [
               "Cervical Spine (Neck)",
+              "Thoracic Spine (Upper Back)",
               "Lumbar Spine (Lower Back)",
               "Shoulder Complex",
-              "Knee Joint",
+              "Elbow",
               "Wrist & Hand",
+              "Hip & Groin",
+              "Knee Joint",
               "Ankle & Foot",
+              "TMJ / Jaw",
           ],
       )
 
-      st.subheader("2. Subjective & General Scoring")
-      vas_score = st.slider("VAS Pain Scale (0 = No Pain, 10 = Max Pain)", 0, 10, 5)
+      st.subheader("2. Pain & Irritability Recording (NPRS Scale)")
+      col_p1, col_p2, col_p3 = st.columns(3)
+      with col_p1:
+        nprs_rest = st.slider("NPRS at Rest (0-10)", 0, 10, 0)
+      with col_p2:
+        nprs_activity = st.slider("NPRS with Relevant Activity (0-10)", 0, 10, 5)
+      with col_p3:
+        nprs_night = st.slider("NPRS at Night (0-10)", 0, 10, 2)
 
       assessment_details_dict = {}
       suggested_treatments = []
       bp_str = "".join(body_parts)
 
+      # --- CERVICAL SPINE ---
       if "Cervical" in bp_str:
         st.markdown("---")
-        st.markdown("### 🔹 Cervical Spine Assessment Criteria")
-        flex = st.text_input(
-            "Cervical Flexion / Extension (Norm: 0-45° / 0-45°)"
+        st.markdown("### 🔹 Cervical Spine / Neck Assessment")
+        c_rom = st.text_input(
+            "Cervical ROM (Flexion 45°, Extension 45°, Lateral Flexion 45°,"
+            " Rotation 80°)"
         )
-        lat = st.text_input(
-            "Cervical Lateral Flexion & Rotation (Norm: 0-45° / 0-80°)"
-        )
+        c_neuro = st.text_input("Neurological Screen (C5-T1 Myotomes/Dermatomes)")
         c_tests = st.multiselect(
             "Cervical Special Tests",
             [
                 "Spurling’s Test",
                 "Cervical Distraction Test",
-                "Bakody Sign (Shoulder Abduction Test)",
+                "Upper Limb Neurodynamic Tests (ULNT)",
+                "Bakody Sign",
             ],
         )
         assessment_details_dict["Cervical"] = {
-            "ROM": f"Flex/Ext: {flex}, Lat/Rot: {lat}",
+            "ROM": c_rom,
+            "Neurological": c_neuro,
             "Tests": c_tests,
         }
         suggested_treatments.append(
-            "Cervical Traction (15 mins) + TENS + Ergonomic Posture Correction"
+            "Cervical Traction + Deep Neck Flexor Endurance + Posture Correction"
         )
 
+      # --- THORACIC SPINE ---
+      if "Thoracic" in bp_str:
+        st.markdown("---")
+        st.markdown("### 🔹 Thoracic Spine / Upper Back Assessment")
+        t_rom = st.text_input(
+            "Thoracic Flexion, Extension, Rotation, and Side-Flexion Findings"
+        )
+        t_palp = st.text_input(
+            "Palpation / Costovertebral Joint Mobility Findings"
+        )
+        assessment_details_dict["Thoracic"] = {
+            "ROM": t_rom,
+            "Palpation": t_palp,
+        }
+        suggested_treatments.append(
+            "Thoracic Mobility Exercises + Scapular Stabilization + Breathing"
+            " Re-education"
+        )
+
+      # --- LUMBAR SPINE ---
       if "Lumbar" in bp_str:
         st.markdown("---")
-        st.markdown("### 🔹 Lumbar Spine Assessment Criteria")
-        lum_rom = st.text_input(
-            "Lumbar ROM (Forward Flexion, Extension, Side Flexion)"
+        st.markdown("### 🔹 Lumbar Spine / Low Back Assessment")
+        l_rom = st.text_input(
+            "Lumbar ROM (Flexion, Extension, Side-Glide, Rotation)"
+        )
+        l_neuro = st.text_input(
+            "Neurological Screen (L2-S1 Myotomes, Reflexes, Slump/SLR)"
         )
         l_tests = st.multiselect(
             "Lumbar Special Tests",
-            ["Straight Leg Raise (SLR)", "Slump Test", "FABER (Patrick's) Test"],
+            [
+                "Straight Leg Raise (SLR)",
+                "Crossed SLR",
+                "Slump Test",
+                "Femoral Nerve Stretch",
+            ],
         )
         assessment_details_dict["Lumbar"] = {
-            "ROM": lum_rom,
+            "ROM": l_rom,
+            "Neurological": l_neuro,
             "Tests": l_tests,
         }
         suggested_treatments.append(
-            "IFT + Short Wave Diathermy (SWD) + Core Stabilization Exercises"
+            "Core Stabilization Exercises + Lumbar Traction + Centralization"
+            " Mechanics"
         )
 
+      # --- SHOULDER COMPLEX ---
       if "Shoulder" in bp_str:
         st.markdown("---")
-        st.markdown("### 🔹 Shoulder Complex Assessment Criteria")
+        st.markdown("### 🔹 Shoulder Complex Assessment")
         sh_rom = st.text_input(
-            "Shoulder ROM (Flexion 0-180°, Abduction 0-180°, Rotations)"
+            "Shoulder ROM (Flexion 180°, Abduction 180°, ER/IR, Painful Arc)"
         )
         sh_tests = st.multiselect(
             "Shoulder Special Tests",
             [
                 "Neer Test",
                 "Hawkins-Kennedy Test",
-                "Empty Can (Jobe) Test",
-                "Apprehension & Relocation Test",
+                "Empty Can (Jobe)",
+                "Speed's / Yergason's",
+                "Apprehension / Relocation",
             ],
         )
         assessment_details_dict["Shoulder"] = {
@@ -257,69 +304,136 @@ elif menu == "Comprehensive Clinical Assessment":
             "Tests": sh_tests,
         }
         suggested_treatments.append(
-            "Ultrasound Therapy + Pendular Exercises + Rotator Cuff Strengthening"
+            "Rotator Cuff Strengthening + Scapular Retraction Drills +"
+            " Ultrasound"
         )
 
+      # --- ELBOW ---
+      if "Elbow" in bp_str:
+        st.markdown("---")
+        st.markdown("### 🔹 Elbow Assessment")
+        el_rom = st.text_input("Elbow Flexion/Extension & Pronation/Supination")
+        el_tests = st.multiselect(
+            "Elbow Special Tests",
+            [
+                "Cozen's / Maudsley's Test",
+                "Resisted Wrist Flexion",
+                "Valgus/Varus Stress Test",
+            ],
+        )
+        assessment_details_dict["Elbow"] = {"ROM": el_rom, "Tests": el_tests}
+        suggested_treatments.append(
+            "Eccentric Wrist Extension/Flexion + Soft Tissue Mobilization"
+        )
+
+      # --- WRIST & HAND ---
+      if "Wrist" in bp_str:
+        st.markdown("---")
+        st.markdown("### 🔹 Wrist & Hand Assessment")
+        w_rom = st.text_input(
+            "Wrist Flexion/Extension, Radial/Ulnar Deviation, Pronation/Supination"
+        )
+        w_tests = st.multiselect(
+            "Wrist Special Tests",
+            [
+                "Phalen’s Test",
+                "Tinel’s Sign",
+                "Durkan's Test",
+                "Finkelstein’s Test",
+                "Scaphoid Shift Test",
+            ],
+        )
+        assessment_details_dict["Wrist"] = {"ROM": w_rom, "Tests": w_tests}
+        suggested_treatments.append(
+            "Carpal Tunnel Glides + Splinting Advice + Ergonomic Correction"
+        )
+
+      # --- HIP & GROIN ---
+      if "Hip" in bp_str:
+        st.markdown("---")
+        st.markdown("### 🔹 Hip & Groin Assessment")
+        h_rom = st.text_input(
+            "Hip ROM (Flexion, Extension, Abduction/Adduction, Internal/External"
+            " Rotation)"
+        )
+        h_tests = st.multiselect(
+            "Hip Special Tests",
+            [
+                "FADIR Test",
+                "FABER (Patrick's) Test",
+                "Scour Test",
+                "Trendelenburg Test",
+            ],
+        )
+        assessment_details_dict["Hip"] = {"ROM": h_rom, "Tests": h_tests}
+        suggested_treatments.append(
+            "Hip Abductor Strengthening + Capsule Mobilization + Single-Leg"
+            " Control"
+        )
+
+      # --- KNEE JOINT ---
       if "Knee" in bp_str:
         st.markdown("---")
-        st.markdown("### 🔹 Knee Joint Assessment Criteria")
-        kn_rom = st.text_input(
-            "Knee ROM (Flexion Norm: 0-140°, Extension Norm: 0°)"
+        st.markdown("### 🔹 Knee Joint Assessment")
+        k_rom = st.text_input(
+            "Knee ROM (Flexion 140°, Extension 0°, Effusion/Sweep Test)"
         )
-        kn_tests = st.multiselect(
+        k_tests = st.multiselect(
             "Knee Special Tests",
             [
                 "Lachman Test",
-                "Anterior Drawer Test",
-                "Posterior Drawer Test",
+                "Anterior/Posterior Drawer",
                 "McMurray Test",
-                "Valgus / Varus Stress Test",
+                "Valgus/Varus Stress Test",
+                "Patellar Apprehension",
             ],
         )
-        assessment_details_dict["Knee"] = {"ROM": kn_rom, "Tests": kn_tests}
+        assessment_details_dict["Knee"] = {"ROM": k_rom, "Tests": k_tests}
         suggested_treatments.append(
-            "Short Wave Diathermy / IFT + Quadriceps Strengthening + Patellar"
-            " Mobilization"
+            "Quadriceps VMO Strengthening + Patellar Mobilization + Squat"
+            " Mechanics"
         )
 
-      if "Wrist" in bp_str:
-        st.markdown("---")
-        st.markdown("### 🔹 Wrist & Hand Assessment Criteria")
-        wr_rom = st.text_input(
-            "Wrist ROM (Flexion 0-80°, Extension 0-70°, Deviations)"
-        )
-        wr_tests = st.multiselect(
-            "Wrist Special Tests",
-            ["Phalen’s Test", "Tinel’s Sign", "Finkelstein’s Test"],
-        )
-        assessment_details_dict["Wrist"] = {"ROM": wr_rom, "Tests": wr_tests}
-        suggested_treatments.append(
-            "Wax Bath Therapy / Ultrasound + Gentle Joint Mobilization & Ergonomics"
-        )
-
+      # --- ANKLE & FOOT ---
       if "Ankle" in bp_str:
         st.markdown("---")
-        st.markdown("### 🔹 Ankle & Foot Assessment Criteria")
-        an_rom = st.text_input(
-            "Ankle ROM (Dorsiflexion 0-20°, Plantarflexion 0-50°)"
+        st.markdown("### 🔹 Ankle & Foot Assessment")
+        a_rom = st.text_input(
+            "Ankle Dorsiflexion/Plantarflexion, Weight-Bearing Lunge Test"
         )
-        an_tests = st.multiselect(
+        a_tests = st.multiselect(
             "Ankle Special Tests",
             [
-                "Anterior Drawer Test (ATFL)",
+                "Anterior Drawer (ATFL)",
                 "Squeeze Test (Syndesmosis)",
-                "Thompson Test (Achilles Tendon)",
+                "Thompson Test (Achilles)",
             ],
         )
-        assessment_details_dict["Ankle"] = {"ROM": an_rom, "Tests": an_tests}
+        assessment_details_dict["Ankle"] = {"ROM": a_rom, "Tests": a_tests}
         suggested_treatments.append(
-            "Contrast Bath / TENS + Proprioceptive & Balance Training"
+            "Proprioceptive Balance Training + Calf Raises + Taping/Bracing"
+        )
+
+      # --- TMJ / JAW ---
+      if "TMJ" in bp_str:
+        st.markdown("---")
+        st.markdown("### 🔹 TMJ / Jaw Assessment")
+        j_rom = st.text_input(
+            "Jaw Opening (mm), Lateral Excursion, Deviation/Deflection Path"
+        )
+        j_tests = st.multiselect(
+            "TMJ Screening",
+            ["Joint Sounds / Clicking History", "Masticatory Muscle Palpation"],
+        )
+        assessment_details_dict["TMJ"] = {"ROM": j_rom, "Tests": j_tests}
+        suggested_treatments.append(
+            "Cervicogenic Posture Correction + Jaw Relaxation Drills"
         )
 
       st.markdown("---")
       st.markdown("### 🔹 General Manual Muscle Testing (MMT)")
       mmt_grade = st.selectbox(
-          "Overall MMT Grading",
+          "Overall MMT Grading Scale",
           [
               "Grade 5 (Normal - Full ROM against max resistance)",
               "Grade 4 (Good - Full ROM against moderate resistance)",
@@ -354,9 +468,11 @@ elif menu == "Comprehensive Clinical Assessment":
             "assessment_id": assessment_id,
             "patient_id": selected_patient,
             "body_parts": ", ".join(body_parts),
-            "vas_score": vas_score,
+            "vas_score": nprs_activity,
             "assessment_details": (
-                f"MMT: {mmt_grade} | Details: {str(assessment_details_dict)}"
+                f"NPRS[Rest:{nprs_rest}, Act:{nprs_activity},"
+                f" Night:{nprs_night}] | MMT: {mmt_grade} | Details:"
+                f" {str(assessment_details_dict)}"
             ),
             "suggested_treatment": " | ".join(suggested_treatments),
             "suggested_duration": f"{suggested_time} Sessions",
@@ -366,8 +482,8 @@ elif menu == "Comprehensive Clinical Assessment":
 
         save_data("assessments", assessment_dict)
         st.success(
-            "Assessment protocols saved and synced to Supabase for"
-            f" **{selected_patient}**!"
+            "Comprehensive assessment protocol saved and synced to Supabase"
+            f" for **{selected_patient}**!"
         )
 
 # --- 3. DAILY TREATMENT LOG ---
@@ -389,7 +505,7 @@ elif menu == "Daily Treatment Log":
           "Treatment Provided Today (e.g., IFT 15 mins, Exercise therapy)"
       )
       current_vas = st.slider(
-          "Current Session VAS Pain Score", 0, 10, 3, key="cur_v"
+          "Current Session NPRS Pain Score", 0, 10, 3, key="cur_v"
       )
       notes = st.text_area("Therapist Progress Notes")
 
@@ -437,7 +553,7 @@ elif menu == "Patient Progress Dashboard":
       if patient_logs.empty:
         st.info("No daily logs recorded yet for this patient.")
       else:
-        st.subheader("Pain Reduction Over Time (VAS Score Trend)")
+        st.subheader("Pain Reduction Over Time (NPRS Trend)")
         fig = px.line(
             patient_logs,
             x=date_col,
@@ -446,7 +562,7 @@ elif menu == "Patient Progress Dashboard":
             title=f"Improvement Graph for Patient: {dash_patient}",
             labels={
                 date_col: "Date of Session",
-                vas_col: "VAS Pain Score (0-10)",
+                vas_col: "NPRS Pain Score (0-10)",
             },
         )
         st.plotly_chart(fig, use_container_width=True)
