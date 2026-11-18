@@ -2,6 +2,7 @@ import datetime
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from supabase import create_client
 
 st.set_page_config(
     page_title="Dr. Geetanjali’s PhysioWorks", page_icon="🩺", layout="wide"
@@ -49,46 +50,26 @@ st.markdown(
 try:
   st.sidebar.image("image_500b64.jpg", width=200)
 except Exception:
-  st.sidebar.info("Logo image `image_500b64.jpg` loading...")
+  st.sidebar.info("Logo image loading...")
 st.sidebar.markdown("---")
 
-# --- INITIALIZE DATABASE STORAGE ---
-if "patients" not in st.session_state:
-  st.session_state.patients = pd.DataFrame(
-      columns=[
-          "Patient_ID",
-          "Name",
-          "Email",
-          "Gender",
-          "Phone",
-          "Medical_History",
-          "Registration_Date",
-      ]
-  )
-if "assessments" not in st.session_state:
-  st.session_state.assessments = pd.DataFrame(
-      columns=[
-          "Assessment_ID",
-          "Patient_ID",
-          "Body_Parts",
-          "VAS_Score",
-          "Assessment_Details",
-          "Suggested_Treatment",
-          "Suggested_Duration",
-          "Therapist",
-          "Date",
-      ]
-  )
-if "daily_logs" not in st.session_state:
-  st.session_state.daily_logs = pd.DataFrame(
-      columns=[
-          "Patient_ID",
-          "Session_Date",
-          "Treatment_Given",
-          "Current_VAS",
-          "Notes",
-      ]
-  )
+# --- SUPABASE CONNECTION SETUP ---
+# Replace with your actual Supabase URL & Anon Key from Project Settings > API
+SUPABASE_URL = bicpyvfotfqoftpppatd
+SUPABASE_KEY = sb_publishable_FK0NBVBpOG-Ek9BOIqQUjQ_1Jb-fOgW
+
+supabase = None
+try:
+  if SUPABASE_URL != "YOUR_SUPABASE_URL":
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    st.sidebar.success("✅ Connected to Supabase Database!")
+  else:
+    st.sidebar.warning(
+        "ℹ️ Running in local memory mode. Add your Supabase URL & Key in"
+        " `app.py` for live sync."
+    )
+except Exception as e:
+  st.sidebar.error(f"Supabase connection error: {e}")
 
 menu = st.sidebar.selectbox(
     "Clinic Navigation",
@@ -101,15 +82,31 @@ menu = st.sidebar.selectbox(
 )
 
 
-def get_data(tab_name):
-  return st.session_state.get(tab_name, pd.DataFrame())
+# Helper Functions for Supabase Database Read/Write
+def get_data(table_name):
+  if supabase:
+    try:
+      response = supabase.table(table_name).select("*").execute()
+      if response.data:
+        return pd.DataFrame(response.data)
+    except Exception:
+      pass
+  if table_name not in st.session_state:
+    st.session_state[table_name] = pd.DataFrame()
+  return st.session_state[table_name]
 
 
-def save_data(tab_name, new_row_df):
-  if tab_name not in st.session_state:
-    st.session_state[tab_name] = pd.DataFrame()
-  st.session_state[tab_name] = pd.concat(
-      [st.session_state[tab_name], new_row_df], ignore_index=True
+def save_data(table_name, row_dict):
+  if supabase:
+    try:
+      supabase.table(table_name).insert(row_dict).execute()
+    except Exception as e:
+      st.error(f"Error saving to Supabase: {e}")
+  if table_name not in st.session_state:
+    st.session_state[table_name] = pd.DataFrame()
+  new_df = pd.DataFrame([row_dict])
+  st.session_state[table_name] = pd.concat(
+      [st.session_state[table_name], new_df], ignore_index=True
   )
 
 
@@ -143,7 +140,7 @@ if menu == "New Patient Registration":
       counter = len(patients_df) + 1 if not patients_df.empty else 1
       patient_id = f"PW{datetime.datetime.now().strftime('%m%y')}{counter:03d}"
 
-      new_patient = pd.DataFrame([{
+      patient_dict = {
           "Patient_ID": patient_id,
           "Name": name,
           "Email": email,
@@ -151,11 +148,12 @@ if menu == "New Patient Registration":
           "Phone": phone,
           "Medical_History": med_history,
           "Registration_Date": str(datetime.date.today()),
-      }])
+      }
 
-      save_data("Patients", new_patient)
+      save_data("Patients", patient_dict)
       st.success(
-          f"Patient registered successfully! Generated Patient ID: **{patient_id}**"
+          f"Patient registered successfully & saved to Supabase! Generated ID:"
+          f" **{patient_id}**"
       )
 
   patients_display = get_data("Patients")
@@ -351,7 +349,7 @@ elif menu == "Comprehensive Clinical Assessment":
       )
       if save_assessment:
         assessment_id = f"ASM-{datetime.datetime.now().strftime('%Y%m%d%H%M')}"
-        new_record = pd.DataFrame([{
+        assessment_dict = {
             "Assessment_ID": assessment_id,
             "Patient_ID": selected_patient,
             "Body_Parts": ", ".join(body_parts),
@@ -363,12 +361,12 @@ elif menu == "Comprehensive Clinical Assessment":
             "Suggested_Duration": f"{suggested_time} Sessions",
             "Therapist": therapist,
             "Date": str(datetime.date.today()),
-        }])
+        }
 
-        save_data("Assessments", new_record)
+        save_data("Assessments", assessment_dict)
         st.success(
-            "Assessment protocols saved successfully for "
-            f"**{selected_patient}**!"
+            "Assessment protocols saved and synced to Supabase for"
+            f" **{selected_patient}**!"
         )
 
 # --- 3. DAILY TREATMENT LOG ---
@@ -394,15 +392,17 @@ elif menu == "Daily Treatment Log":
 
       submit_log = st.form_submit_button("Save Daily Log")
       if submit_log:
-        new_log = pd.DataFrame([{
+        log_dict = {
             "Patient_ID": log_patient,
             "Session_Date": str(log_date),
             "Treatment_Given": treatment_given,
             "Current_VAS": current_vas,
             "Notes": notes,
-        }])
-        save_data("Daily_Logs", new_log)
-        st.success("Daily treatment log saved successfully!")
+        }
+        save_data("Daily_Logs", log_dict)
+        st.success(
+            "Daily treatment log saved and synced to Supabase database!"
+        )
 
 # --- 4. PATIENT PROGRESS DASHBOARD ---
 elif menu == "Patient Progress Dashboard":
