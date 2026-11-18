@@ -1,6 +1,4 @@
 import datetime
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -48,33 +46,71 @@ st.markdown(
 )
 
 # --- SIDEBAR LOGO & BRANDING ---
-st.sidebar.image("image_500b64.jpg", use_column_width=True)
+try:
+  st.sidebar.image("image_500b64.jpg", width=200)
+except Exception:
+  st.sidebar.info("Logo image `image_500b64.jpg` loading...")
 st.sidebar.markdown("---")
 
+# --- GOOGLE SHEETS & STORAGE CONNECTION SETUP ---
+# To use live Google Sheets, we initialize session state fallback and optional gspread
+if "patients" not in st.session_state:
+  st.session_state.patients = pd.DataFrame(
+      columns=[
+          "Patient_ID",
+          "Name",
+          "Email",
+          "Gender",
+          "Phone",
+          "Medical_History",
+          "Registration_Date",
+      ]
+  )
+if "assessments" not in st.session_state:
+  st.session_state.assessments = pd.DataFrame(
+      columns=[
+          "Assessment_ID",
+          "Patient_ID",
+          "Body_Parts",
+          "VAS_Score",
+          "Assessment_Details",
+          "Suggested_Treatment",
+          "Suggested_Duration",
+          "Therapist",
+          "Date",
+      ]
+  )
+if "daily_logs" not in st.session_state:
+  st.session_state.daily_logs = pd.DataFrame(
+      columns=[
+          "Patient_ID",
+          "Session_Date",
+          "Treatment_Given",
+          "Current_VAS",
+          "Notes",
+      ]
+  )
 
-# --- GOOGLE SHEETS CONNECTION SETUP ---
-@st.cache_resource
-def connect_to_sheets():
+# Try connecting to gspread if secrets/credentials exist
+db_sheet = None
+try:
+  import gspread
+  from oauth2client.service_account import ServiceAccountCredentials
+
   scope = [
       "https://www.spreadsheets.google.com/feeds",
       "https://www.googleapis.com/auth/drive",
   ]
-  try:
-    creds = ServiceAccountCredentials.from_json_keyfile_name(
-        "credentials.json", scope
-    )
-    client = gspread.authorize(creds)
-    sheet = client.open("Dr_Geetanjalis_PhysioWorks_Live_DB")
-    return sheet
-  except Exception as e:
-    return None
-
-
-db_sheet = connect_to_sheets()
-
-if db_sheet is None:
+  creds = ServiceAccountCredentials.from_json_keyfile_name(
+      "credentials.json", scope
+  )
+  client = gspread.authorize(creds)
+  db_sheet = client.open("Dr_Geetanjalis_PhysioWorks_Live_DB")
+  st.sidebar.success("✅ Connected to Google Sheets DB!")
+except Exception:
   st.sidebar.warning(
-      "⚠️ Live Google Sheet not connected. Running in local state memory mode."
+      "ℹ️ Running in cloud session state mode (Upload `credentials.json` to"
+      " Streamlit secrets if live sheet sync is needed)."
   )
 
 menu = st.sidebar.selectbox(
@@ -93,28 +129,27 @@ def get_data(tab_name):
     try:
       worksheet = db_sheet.worksheet(tab_name)
       data = worksheet.get_all_records()
-      return pd.DataFrame(data)
+      if data:
+        return pd.DataFrame(data)
     except Exception:
-      return pd.DataFrame()
-  else:
-    if tab_name not in st.session_state:
-      st.session_state[tab_name] = pd.DataFrame()
-    return st.session_state[tab_name]
+      pass
+  return st.session_state.get(tab_name, pd.DataFrame())
 
 
 def save_data(tab_name, new_row_df):
   if db_sheet:
     try:
       worksheet = db_sheet.worksheet(tab_name)
-      worksheet.append_row(new_row_df.values.tolist()[0])
-    except Exception as e:
-      st.error(f"Error saving to Google Sheets: {e}")
-  else:
-    if tab_name not in st.session_state:
-      st.session_state[tab_name] = pd.DataFrame()
-    st.session_state[tab_name] = pd.concat(
-        [st.session_state[tab_name], new_row_df], ignore_index=True
-    )
+      worksheet.append_row(
+          [str(val) for val in new_row_df.values.tolist()[0]]
+      )
+    except Exception:
+      pass
+  if tab_name not in st.session_state:
+    st.session_state[tab_name] = pd.DataFrame()
+  st.session_state[tab_name] = pd.concat(
+      [st.session_state[tab_name], new_row_df], ignore_index=True
+  )
 
 
 st.title("🩺 Dr. Geetanjali’s PhysioWorks")
@@ -198,7 +233,10 @@ elif menu == "Comprehensive Clinical Assessment":
       assessment_details_dict = {}
       suggested_treatments = []
 
-      if "Cervical Spine (Neck)" in body_parts:
+      # Robust matching for body parts
+      bp_str = "".join(body_parts)
+
+      if "Cervical" in bp_str:
         st.markdown("---")
         st.markdown("### 🔹 Cervical Spine Assessment Criteria")
         flex = st.text_input(
@@ -223,7 +261,7 @@ elif menu == "Comprehensive Clinical Assessment":
             "Cervical Traction (15 mins) + TENS + Ergonomic Posture Correction"
         )
 
-      if "Lumbar Spine (Lower Back)" in body_parts:
+      if "Lumbar" in bp_str:
         st.markdown("---")
         st.markdown("### 🔹 Lumbar Spine Assessment Criteria")
         lum_rom = st.text_input(
@@ -241,7 +279,7 @@ elif menu == "Comprehensive Clinical Assessment":
             "IFT + Short Wave Diathermy (SWD) + Core Stabilization Exercises"
         )
 
-      if "Shoulder Complex" in body_parts:
+      if "Shoulder" in bp_str:
         st.markdown("---")
         st.markdown("### 🔹 Shoulder Complex Assessment Criteria")
         sh_rom = st.text_input(
@@ -264,7 +302,7 @@ elif menu == "Comprehensive Clinical Assessment":
             "Ultrasound Therapy + Pendular Exercises + Rotator Cuff Strengthening"
         )
 
-      if "Knee Joint" in body_parts:
+      if "Knee" in bp_str:
         st.markdown("---")
         st.markdown("### 🔹 Knee Joint Assessment Criteria")
         kn_rom = st.text_input(
@@ -286,7 +324,7 @@ elif menu == "Comprehensive Clinical Assessment":
             " Mobilization"
         )
 
-      if "Wrist & Hand" in body_parts:
+      if "Wrist" in bp_str:
         st.markdown("---")
         st.markdown("### 🔹 Wrist & Hand Assessment Criteria")
         wr_rom = st.text_input(
@@ -301,7 +339,7 @@ elif menu == "Comprehensive Clinical Assessment":
             "Wax Bath Therapy / Ultrasound + Gentle Joint Mobilization & Ergonomics"
         )
 
-      if "Ankle & Foot" in body_parts:
+      if "Ankle" in bp_str:
         st.markdown("---")
         st.markdown("### 🔹 Ankle & Foot Assessment Criteria")
         an_rom = st.text_input(
@@ -370,8 +408,8 @@ elif menu == "Comprehensive Clinical Assessment":
 
         save_data("Assessments", new_record)
         st.success(
-            "Assessment protocols saved successfully and synced to Google"
-            f" Sheets database for {selected_patient}!"
+            "Assessment protocols saved successfully and synced for"
+            f" {selected_patient}!"
         )
 
 # --- 3. DAILY TREATMENT LOG ---
