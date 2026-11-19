@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from supabase import create_client
+from fpdf import FPDF
 
 st.set_page_config(
     page_title="Dr. Geetanjali’s PhysioWorks",
@@ -201,6 +202,139 @@ def save_data(table_name, row_dict):
 
 
 def col_val(df, col_options, default=""):
+    def create_assessment_pdf(
+    patient_row, asm_row=None, logo_path="image_500b64.jpg"
+):
+  pdf = FPDF()
+  pdf.set_auto_page_break(auto=True, margin=15)
+  pdf.add_page()
+
+  # Header with Logo & Branding
+  try:
+    pdf.image(logo_path, x=12, y=10, w=32)
+  except Exception:
+    pass
+
+  pdf.set_xy(48, 12)
+  pdf.set_font("Helvetica", "B", 16)
+  pdf.set_text_color(27, 54, 93)  # Navy Blue #1B365D
+  pdf.cell(0, 8, "Dr. Geetanjali's PhysioWorks", ln=True)
+
+  pdf.set_x(48)
+  pdf.set_font("Helvetica", "", 10)
+  pdf.set_text_color(244, 121, 32)  # Vibrant Orange #F47920
+  pdf.cell(
+      0,
+      6,
+      "Physiotherapy | Osteopathy | Chiropractic - Clinical Assessment Record",
+      ln=True,
+  )
+
+  pdf.ln(10)
+  pdf.set_draw_color(244, 121, 32)
+  pdf.set_line_width(0.8)
+  pdf.line(12, pdf.get_y(), 198, pdf.get_y())
+  pdf.ln(6)
+
+  # Patient Profile Section
+  pdf.set_font("Helvetica", "B", 12)
+  pdf.set_text_color(27, 54, 93)
+  pdf.cell(0, 8, "1. Patient Profile & Screening", ln=True)
+
+  pdf.set_font("Helvetica", "", 10)
+  pdf.set_text_color(30, 41, 59)
+  pid = patient_row.get("patient_id") or patient_row.get("Patient_ID", "N/A")
+  name = patient_row.get("name") or patient_row.get("Name", "N/A")
+  gender = patient_row.get("gender") or patient_row.get("Gender", "N/A")
+  phone = patient_row.get("phone") or patient_row.get("Phone", "N/A")
+  reg_date = patient_row.get("registration_date") or patient_row.get(
+      "Registration_Date", str(datetime.date.today())
+  )
+  med_hist = patient_row.get("medical_history") or patient_row.get(
+      "Medical_History", "None reported"
+  )
+
+  pdf.cell(95, 7, f"Patient ID: {pid}", border=1)
+  pdf.cell(91, 7, f"Date: {reg_date}", border=1, ln=True)
+  pdf.cell(95, 7, f"Name: {name}", border=1)
+  pdf.cell(91, 7, f"Gender / Phone: {gender} | {phone}", border=1, ln=True)
+  pdf.multi_cell(186, 7, f"Medical History & Safety Flags: {med_hist}", border=1)
+  pdf.ln(5)
+
+  # Assessment Details Section
+  pdf.set_font("Helvetica", "B", 12)
+  pdf.set_text_color(27, 54, 93)
+  pdf.cell(0, 8, "2. Clinical Assessment & Examination Findings", ln=True)
+
+  pdf.set_font("Helvetica", "", 10)
+  pdf.set_text_color(30, 41, 59)
+
+  if asm_row is not None:
+    asm_id = asm_row.get("assessment_id") or asm_row.get(
+        "Assessment_ID", "N/A"
+    )
+    asm_date = asm_row.get("date") or asm_row.get("Date", "N/A")
+    regions = asm_row.get("body_parts") or asm_row.get("Body_Parts", "N/A")
+    vas = asm_row.get("vas_score") or asm_row.get("VAS_Score", "N/A")
+    details = asm_row.get("assessment_details") or asm_row.get(
+        "Assessment_Details", "N/A"
+    )
+    plan = asm_row.get("suggested_treatment") or asm_row.get(
+        "Suggested_Treatment", "N/A"
+    )
+    duration = asm_row.get("suggested_duration") or asm_row.get(
+        "Suggested_Duration", "N/A"
+    )
+    therapist = asm_row.get("therapist") or asm_row.get("Therapist", "N/A")
+
+    pdf.cell(95, 7, f"Assessment ID: {asm_id}", border=1)
+    pdf.cell(91, 7, f"Assessment Date: {asm_date}", border=1, ln=True)
+    pdf.cell(140, 7, f"Affected Region(s): {regions}", border=1)
+    pdf.cell(46, 7, f"Activity NPRS: {vas}/10", border=1, ln=True)
+    pdf.multi_cell(
+        186,
+        7,
+        f"Examination, ROM, Special Tests & MMT:\n{details}",
+        border=1,
+    )
+    pdf.ln(4)
+
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_text_color(27, 54, 93)
+    pdf.cell(0, 8, "3. Rehabilitation Plan & Therapist Assignment", ln=True)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_text_color(30, 41, 59)
+    pdf.multi_cell(186, 7, f"Suggested Modalities & Plan:\n{plan}", border=1)
+    pdf.cell(95, 7, f"Recommended Duration: {duration}", border=1)
+    pdf.cell(91, 7, f"Assigned Therapist: {therapist}", border=1, ln=True)
+  else:
+    # Printable blank template rows for physical clinical recording
+    blank_sections = [
+        "Chief Complaint, Onset & 24-Hr Behavior:",
+        "NPRS Pain Score — Rest: ___/10   Activity: ___/10   Night: ___/10",
+        "Observation & Posture:",
+        "Active / Passive ROM & End-Feel:",
+        "Neurological Screen (Myotomes / Dermatomes / Reflexes):",
+        "Manual Muscle Testing (MMT 0-5) & Strength:",
+        "Region-Specific Special Tests & Side Comparison:",
+        "Clinical Impression & Differential Diagnosis:",
+        "Treatment Plan, Modalities & Home Exercise Program:",
+    ]
+    for sec in blank_sections:
+      pdf.multi_cell(186, 12, sec, border=1)
+
+  pdf.ln(12)
+  pdf.set_font("Helvetica", "I", 9)
+  pdf.set_text_color(100, 116, 139)
+  pdf.cell(
+      0,
+      6,
+      "Clinician Signature: ___________________________      Date:"
+      " _______________",
+      ln=True,
+  )
+
+  return bytes(pdf.output())
   for c in col_options:
     if c in df.columns:
       return c
@@ -914,6 +1048,29 @@ elif menu == "Progress & Summary":
         st.caption("No daily logs recorded.")
 
     with tab_export:
+        st.markdown("---")
+      st.markdown("**Printable PDF Clinical Assessment Record**")
+      latest_asm = p_asm.iloc[-1].to_dict() if not p_asm.empty else None
+
+      col_pdf1, col_pdf2 = st.columns(2)
+      with col_pdf1:
+        filled_pdf_bytes = create_assessment_pdf(p_row, asm_row=latest_asm)
+        st.download_button(
+            label="📄 Download Patient Assessment PDF",
+            data=filled_pdf_bytes,
+            file_name=(
+                f"{dash_patient}_assessment_record_{datetime.date.today()}.pdf"
+            ),
+            mime="application/pdf",
+        )
+      with col_pdf2:
+        blank_pdf_bytes = create_assessment_pdf(p_row, asm_row=None)
+        st.download_button(
+            label="🖨️ Download Blank Printable Form (With Patient Header)",
+            data=blank_pdf_bytes,
+            file_name=f"{dash_patient}_blank_clinical_form.pdf",
+            mime="application/pdf",
+        )
       p_row = (
           patients_all[patients_all[pid_col] == dash_patient].iloc[0].to_dict()
       )
