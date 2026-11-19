@@ -202,7 +202,7 @@ def save_data(table_name, row_dict):
 
 
 def col_val(df, col_options, default=""):
-    def create_assessment_pdf(
+def create_assessment_pdf(
     patient_row, asm_row=None, logo_path="image_500b64.jpg"
 ):
   pdf = FPDF()
@@ -308,7 +308,6 @@ def col_val(df, col_options, default=""):
     pdf.cell(95, 7, f"Recommended Duration: {duration}", border=1)
     pdf.cell(91, 7, f"Assigned Therapist: {therapist}", border=1, ln=True)
   else:
-    # Printable blank template rows for physical clinical recording
     blank_sections = [
         "Chief Complaint, Onset & 24-Hr Behavior:",
         "NPRS Pain Score — Rest: ___/10   Activity: ___/10   Night: ___/10",
@@ -334,8 +333,7 @@ def col_val(df, col_options, default=""):
       ln=True,
   )
 
-  return bytes(pdf.output())
-  for c in col_options:
+  return bytes(pdf.output())  for c in col_options:
     if c in df.columns:
       return c
   return default
