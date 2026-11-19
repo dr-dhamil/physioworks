@@ -155,7 +155,6 @@ st.markdown(
 )
 
 # --- SUPABASE CONNECTION SETUP ---
-SUPABASE_URL = st.secrets.get(
   SUPABASE_URL = "https://bicpyvfotfqoftpppatd.supabase.co"
 SUPABASE_KEY = "sb_publishable_FK0NBVBpOG-Ek9BOIqQUjQ_1Jb-fOgW"
 
