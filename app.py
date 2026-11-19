@@ -154,8 +154,8 @@ try:
   SUPABASE_URL = st.secrets["SUPABASE_URL"]
   SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 except Exception:
-SUPABASE_URL = "https://bicpyvfotfqoftpppatd.supabase.co"
-SUPABASE_KEY = "sb_publishable_FK0NBVBpOG-Ek9BOIqQUjQ_1Jb-fOgW"
+  SUPABASE_URL = "https://bicpyvfotfqoftpppatd.supabase.co"
+  SUPABASE_KEY = "sb_publishable_FK0NBVBpOG-Ek9BOIqQUjQ_1Jb-fOgW"
 
 supabase = None
 db_connected = False
