@@ -195,11 +195,14 @@ except Exception as e:
   st.sidebar.error(f"Supabase connection error: {e}")
 
 # --- GEMINI AI SETUP ---
-GEMINI_API_KEY = None
+secret_gemini_key = ""
 try:
-  GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY")
+  secret_gemini_key = st.secrets.get("GEMINI_API_KEY") or ""
 except Exception:
-  GEMINI_API_KEY = None
+  secret_gemini_key = ""
+
+if "gemini_api_key_input" not in st.session_state:
+  st.session_state["gemini_api_key_input"] = secret_gemini_key
 
 
 def get_data(table_name):
@@ -711,7 +714,13 @@ with st.sidebar:
     st.success("● Supabase Cloud Sync: Active")
   else:
     st.info("● Storage Mode: Session Memory")
-
+st.text_input(
+    "Gemini API Key",
+    type="password",
+    key="gemini_api_key_input",
+    placeholder="Paste Gemini key here",
+)
+GEMINI_API_KEY = st.session_state["gemini_api_key_input"].strip() or None
   if GEMINI_API_KEY:
     st.success("● Gemini AI: Ready")
   else:
