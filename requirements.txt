@@ -3,5 +3,5 @@ pandas
 plotly
 supabase
 fpdf2
-google-genai
+google-genai>=2.3.0
 requests
