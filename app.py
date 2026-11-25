@@ -1,7 +1,7 @@
 import datetime
+import json
 from fpdf import FPDF
 from google import genai
-import json
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -28,7 +28,6 @@ st.markdown(
         --card-bg: #FFFFFF;
         --border-subtle: #E2E8F0;
         --text-main: #1E293B;
-        --text-muted: #64748B;
     }
 
     .stApp {
@@ -55,6 +54,10 @@ st.markdown(
         background-color: rgba(255, 255, 255, 0.12);
         color: #FFFFFF !important;
         border-color: rgba(255, 255, 255, 0.25);
+    }
+    [data-testid="stSidebar"] input {
+        background-color: rgba(255, 255, 255, 0.14) !important;
+        color: #FFFFFF !important;
     }
 
     .clinic-banner {
@@ -182,6 +185,7 @@ except Exception:
   SUPABASE_URL = "https://bicpyvfotfqoftpppatd.supabase.co"
   SUPABASE_KEY = "sb_publishable_FK0NBVBpOG-Ek9BOIqQUjQ_1Jb-fOgW"
 
+
 supabase = None
 db_connected = False
 try:
@@ -194,7 +198,7 @@ try:
 except Exception as e:
   st.sidebar.error(f"Supabase connection error: {e}")
 
-# --- GEMINI AI SETUP ---
+# --- GEMINI AI KEY INITIALIZATION ---
 secret_gemini_key = ""
 try:
   secret_gemini_key = st.secrets.get("GEMINI_API_KEY") or ""
@@ -303,181 +307,300 @@ def render_patient_banner(patients_df, selected_pid):
   return p_hist
 
 
-def render_3d_body_selector(selected_regions):
-  """Interactive Three.js 3D anatomical figure with clickable region nodes."""
+def render_3d_human_pain_mapper(selected_regions):
+  """Realistic sculpted 3D anatomical human body with surface pain-spot marking & view controls."""
   active_json = json.dumps(selected_regions)
   html_code = f"""
     <!DOCTYPE html>
     <html>
     <head>
       <style>
-        body {{ margin: 0; background: #F8FAFC; font-family: sans-serif; }}
-        #wrap {{ position: relative; width: 100%; height: 430px; border-radius: 10px; overflow: hidden; border: 1px solid #CBD5E1; }}
-        .hud {{
+        body {{ margin: 0; background: #0F172A; font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #F8FAFC; }}
+        #wrap {{
+          position: relative; width: 100%; height: 480px; border-radius: 12px;
+          overflow: hidden; border: 1px solid #334155;
+          background: radial-gradient(circle at 50% 35%, #1E293B 0%, #0F172A 100%);
+        }}
+        .top-bar {{
           position: absolute; top: 10px; left: 10px; right: 10px;
           display: flex; justify-content: space-between; align-items: center;
-          pointer-events: none; z-index: 10;
+          gap: 6px; z-index: 20; flex-wrap: wrap;
         }}
-        .pill {{
-          background: rgba(27, 54, 93, 0.9); color: #fff; padding: 5px 10px;
-          border-radius: 999px; font-size: 11px; font-weight: 600;
+        .view-btns {{ display: flex; gap: 5px; pointer-events: auto; }}
+        .vbtn {{
+          background: rgba(27, 54, 93, 0.92); color: #F8FAFC; border: 1px solid #475569;
+          padding: 5px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer;
         }}
-        #hover-label {{
-          background: rgba(244, 121, 32, 0.95); color: #fff; padding: 5px 11px;
-          border-radius: 999px; font-size: 11px; font-weight: 700; display: none;
+        .vbtn:hover {{ background: #F47920; border-color: #F47920; }}
+        .vbtn.clear {{ background: rgba(153, 27, 27, 0.9); border-color: #DC2626; }}
+        #status-pill {{
+          background: rgba(244, 121, 32, 0.95); color: #FFFFFF; padding: 5px 11px;
+          border-radius: 999px; font-size: 11px; font-weight: 700;
         }}
-        .hint {{
-          position: absolute; bottom: 8px; left: 12px; color: #475569;
-          font-size: 11px; background: rgba(255,255,255,0.85); padding: 3px 8px; border-radius: 6px;
+        .bottom-bar {{
+          position: absolute; bottom: 10px; left: 10px; right: 10px;
+          background: rgba(15, 23, 42, 0.85); border: 1px solid #334155;
+          border-radius: 8px; padding: 7px 11px; font-size: 11px; color: #CBD5E1;
+          display: flex; justify-content: space-between; align-items: center;
         }}
+        #pin-list {{ color: #FDBA74; font-weight: 600; }}
       </style>
     </head>
     <body>
       <div id="wrap">
-        <div class="hud">
-          <span class="pill">3D Anatomical Map • Drag to Rotate</span>
-          <span id="hover-label"></span>
+        <div class="top-bar">
+          <div class="view-btns">
+            <button class="vbtn" onclick="setView(0)">Anterior (Front)</button>
+            <button class="vbtn" onclick="setView(Math.PI)">Posterior (Back)</button>
+            <button class="vbtn" onclick="setView(Math.PI/2)">Left Lateral</button>
+            <button class="vbtn" onclick="setView(-Math.PI/2)">Right Lateral</button>
+            <button class="vbtn clear" onclick="clearPins()">Clear Pain Pins</button>
+          </div>
+          <span id="status-pill">Click body to mark pain spot</span>
         </div>
-        <div class="hint">Click an orange/blue joint marker to toggle selection or use the selector beside.</div>
+        <div class="bottom-bar">
+          <span>Drag to rotate • Scroll to zoom • Click skin to place red pain marker</span>
+          <span id="pin-list">Pain pins: 0</span>
+        </div>
       </div>
+
       <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
       <script>
         const activeRegions = new Set({active_json});
         const container = document.getElementById('wrap');
-        const hoverEl = document.getElementById('hover-label');
+        const statusPill = document.getElementById('status-pill');
+        const pinListEl = document.getElementById('pin-list');
 
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xF8FAFC);
+        const camera = new THREE.PerspectiveCamera(38, container.clientWidth / container.clientHeight, 0.1, 100);
+        camera.position.set(0, 0.95, 3.85);
 
-        const camera = new THREE.PerspectiveCamera(42, container.clientWidth / container.clientHeight, 0.1, 100);
-        camera.position.set(0, 1.0, 4.3);
-
-        const renderer = new THREE.WebGLRenderer({{ antialias: true }});
+        const renderer = new THREE.WebGLRenderer({{ antialias: true, alpha: true }});
         renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         container.appendChild(renderer.domElement);
 
-        const ambient = new THREE.AmbientLight(0xffffff, 0.75);
-        scene.add(ambient);
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
-        dirLight.position.set(2, 4, 3);
-        scene.add(dirLight);
+        // Studio anatomical lighting
+        scene.add(new THREE.AmbientLight(0xE2E8F0, 0.55));
+        const keyLight = new THREE.DirectionalLight(0xFFF7ED, 0.85);
+        keyLight.position.set(2.5, 4.0, 3.5);
+        scene.add(keyLight);
+        const rimLight = new THREE.DirectionalLight(0x93C5FD, 0.45);
+        rimLight.position.set(-2.5, 2.0, -3.0);
+        scene.add(rimLight);
+        const fillLight = new THREE.DirectionalLight(0xCBD5E1, 0.35);
+        fillLight.position.set(0, -2.5, 2.0);
+        scene.add(fillLight);
 
-        const bodyMat = new THREE.MeshStandardMaterial({{ color: 0xCBD5E1, roughness: 0.65, metalness: 0.05 }});
-        const figure = new THREE.Group();
+        // Subtle floor ring for depth orientation
+        const ringGeo = new THREE.RingGeometry(0.45, 0.48, 48);
+        const ringMat = new THREE.MeshBasicMaterial({{ color: 0x334155, side: THREE.DoubleSide }});
+        const floorRing = new THREE.Mesh(ringGeo, ringMat);
+        floorRing.rotation.x = -Math.PI / 2;
+        floorRing.position.y = -0.68;
+        scene.add(floorRing);
 
-        function addPart(geo, x, y, z, rx=0, ry=0, rz=0) {{
-          const m = new THREE.Mesh(geo, bodyMat);
-          m.position.set(x, y, z);
-          m.rotation.set(rx, ry, rz);
-          figure.add(m);
+        // Sculpted anatomical skin shader-like material
+        const skinMat = new THREE.MeshStandardMaterial({{
+          color: 0xD8B49C,
+          roughness: 0.48,
+          metalness: 0.04
+        }});
+
+        const bodyGroup = new THREE.Group();
+        const skinMeshes = [];
+
+        function addLathe(points, segs, x, y, z, sx=1, sy=1, sz=1, rx=0, ry=0, rz=0) {{
+          const pts = points.map(p => new THREE.Vector2(p[0], p[1]));
+          const geo = new THREE.LatheGeometry(pts, segs);
+          const mesh = new THREE.Mesh(geo, skinMat);
+          mesh.position.set(x, y, z);
+          mesh.scale.set(sx, sy, sz);
+          mesh.rotation.set(rx, ry, rz);
+          bodyGroup.add(mesh);
+          skinMeshes.push(mesh);
+          return mesh;
         }}
 
-        // Stylized anatomical mannequin (meters-like scale centered around y=1.0)
-        addPart(new THREE.SphereGeometry(0.22, 20, 20), 0, 2.05, 0);        // Head
-        addPart(new THREE.CylinderGeometry(0.08, 0.09, 0.22, 16), 0, 1.78, 0); // Neck
-        addPart(new THREE.CylinderGeometry(0.28, 0.22, 0.65, 20), 0, 1.35, 0); // Torso
-        addPart(new THREE.CylinderGeometry(0.22, 0.20, 0.25, 20), 0, 0.92, 0); // Pelvis
+        function addSphere(r, x, y, z, sx=1, sy=1, sz=1, rx=0, ry=0, rz=0) {{
+          const geo = new THREE.SphereGeometry(r, 24, 20);
+          const mesh = new THREE.Mesh(geo, skinMat);
+          mesh.position.set(x, y, z);
+          mesh.scale.set(sx, sy, sz);
+          mesh.rotation.set(rx, ry, rz);
+          bodyGroup.add(mesh);
+          skinMeshes.push(mesh);
+          return mesh;
+        }}
 
-        // Left & Right Arms
-        addPart(new THREE.CylinderGeometry(0.065, 0.055, 0.52, 14), -0.36, 1.42, 0, 0, 0, -0.14);
-        addPart(new THREE.CylinderGeometry(0.065, 0.055, 0.52, 14), 0.36, 1.42, 0, 0, 0, 0.14);
-        addPart(new THREE.CylinderGeometry(0.05, 0.04, 0.46, 14), -0.44, 0.96, 0, 0, 0, -0.08);
-        addPart(new THREE.CylinderGeometry(0.05, 0.04, 0.46, 14), 0.44, 0.96, 0, 0, 0, 0.08);
+        // 1. Cranium, Face & Jaw
+        addSphere(0.145, 0, 2.04, -0.01, 0.92, 1.12, 1.02); // Cranium
+        addSphere(0.105, 0, 1.93, 0.035, 0.85, 0.88, 0.92); // Jaw / mandible
 
-        // Left & Right Legs
-        addPart(new THREE.CylinderGeometry(0.095, 0.075, 0.68, 16), -0.13, 0.46, 0);
-        addPart(new THREE.CylinderGeometry(0.095, 0.075, 0.68, 16), 0.13, 0.46, 0);
-        addPart(new THREE.CylinderGeometry(0.07, 0.05, 0.66, 16), -0.13, -0.22, 0);
-        addPart(new THREE.CylinderGeometry(0.07, 0.05, 0.66, 16), 0.13, -0.22, 0);
-        addPart(new THREE.BoxGeometry(0.11, 0.07, 0.24), -0.13, -0.57, 0.05);
-        addPart(new THREE.BoxGeometry(0.11, 0.07, 0.24), 0.13, -0.57, 0.05);
+        // 2. Cervical Neck & Trapezius Slope
+        addLathe([[0.072, 0.0], [0.068, 0.09], [0.076, 0.18]], 24, 0, 1.72, 0, 0.95, 1.0, 1.02);
+        addSphere(0.16, 0, 1.69, -0.02, 1.35, 0.42, 0.72); // Upper trapezius
 
-        const nodes = [
-          {{ label: "Cervical Spine (Neck)", pos: [0, 1.78, 0.08] }},
-          {{ label: "Thoracic Spine (Upper Back)", pos: [0, 1.48, -0.19] }},
-          {{ label: "Lumbar Spine (Lower Back)", pos: [0, 1.12, -0.18] }},
-          {{ label: "Shoulder Complex", pos: [-0.33, 1.63, 0.04] }},
-          {{ label: "Shoulder Complex", pos: [0.33, 1.63, 0.04] }},
-          {{ label: "Elbow", pos: [-0.41, 1.18, 0.03] }},
-          {{ label: "Elbow", pos: [0.41, 1.18, 0.03] }},
-          {{ label: "Wrist & Hand", pos: [-0.47, 0.72, 0.04] }},
-          {{ label: "Wrist & Hand", pos: [0.47, 0.72, 0.04] }},
-          {{ label: "Hip & Groin", pos: [-0.15, 0.86, 0.12] }},
-          {{ label: "Hip & Groin", pos: [0.15, 0.86, 0.12] }},
-          {{ label: "Knee Joint", pos: [-0.13, 0.12, 0.09] }},
-          {{ label: "Knee Joint", pos: [0.13, 0.12, 0.09] }},
-          {{ label: "Ankle & Foot", pos: [-0.13, -0.54, 0.12] }},
-          {{ label: "Ankle & Foot", pos: [0.13, -0.54, 0.12] }},
-          {{ label: "TMJ / Jaw", pos: [0.09, 1.98, 0.17] }},
+        // 3. Sculpted Torso (Pelvis -> Waist -> Ribcage -> Chest)
+        addLathe([
+          [0.14, 0.00], [0.185, 0.10], [0.195, 0.22],
+          [0.162, 0.36], [0.175, 0.50], [0.215, 0.66],
+          [0.225, 0.78], [0.155, 0.87]
+        ], 32, 0, 0.84, 0, 1.08, 1.0, 0.66);
+
+        // Pectoral & Scapular definition
+        addSphere(0.105, -0.095, 1.52, 0.075, 1.05, 0.82, 0.55);
+        addSphere(0.105,  0.095, 1.52, 0.075, 1.05, 0.82, 0.55);
+        addSphere(0.095, -0.095, 1.50, -0.085, 0.95, 1.15, 0.45);
+        addSphere(0.095,  0.095, 1.50, -0.085, 0.95, 1.15, 0.45);
+
+        // Gluteal contours
+        addSphere(0.115, -0.092, 0.88, -0.075, 0.95, 1.05, 0.75);
+        addSphere(0.115,  0.092, 0.88, -0.075, 0.95, 1.05, 0.75);
+
+        // 4. Arms (Deltoid -> Upper Arm -> Elbow -> Forearm -> Hand)
+        [-1, 1].forEach(side => {{
+          addSphere(0.082, side * 0.265, 1.61, 0, 1.0, 1.08, 0.95); // Deltoid
+          addLathe([[0.048, 0.0], [0.058, 0.16], [0.064, 0.30]], 20, side * 0.31, 1.30, 0, 1, 1, 1, 0, 0, -side * 0.12);
+          addSphere(0.047, side * 0.34, 1.29, -0.01); // Elbow joint
+          addLathe([[0.032, 0.0], [0.046, 0.18], [0.050, 0.28]], 20, side * 0.38, 1.01, 0.02, 1, 1, 1, 0.06, 0, -side * 0.10);
+          addSphere(0.036, side * 0.41, 0.95, 0.03, 0.65, 1.55, 0.95); // Hand
+        }});
+
+        // 5. Legs (Thigh -> Knee -> Calf -> Ankle -> Foot)
+        [-1, 1].forEach(side => {{
+          addLathe([[0.062, 0.0], [0.082, 0.22], [0.102, 0.44]], 24, side * 0.115, 0.40, 0, 1.0, 1.0, 1.04); // Thigh
+          addSphere(0.062, side * 0.115, 0.39, 0.012, 0.96, 1.05, 1.02); // Patella / Knee
+          addLathe([[0.042, 0.0], [0.064, 0.25], [0.058, 0.42]], 24, side * 0.115, -0.05, -0.01, 0.95, 1.0, 1.05); // Calf
+          addSphere(0.044, side * 0.115, -0.07, 0); // Ankle malleoli
+          addSphere(0.048, side * 0.115, -0.11, 0.055, 0.92, 0.55, 1.85); // Foot
+        }});
+
+        // Anatomical region detection zones (closest match when user clicks anywhere on skin)
+        const regionZones = [
+          {{ label: "TMJ / Jaw", pos: new THREE.Vector3(0, 1.94, 0.08) }},
+          {{ label: "Cervical Spine (Neck)", pos: new THREE.Vector3(0, 1.79, 0) }},
+          {{ label: "Thoracic Spine (Upper Back)", pos: new THREE.Vector3(0, 1.48, -0.10) }},
+          {{ label: "Lumbar Spine (Lower Back)", pos: new THREE.Vector3(0, 1.12, -0.09) }},
+          {{ label: "Shoulder Complex", pos: new THREE.Vector3(-0.27, 1.60, 0) }},
+          {{ label: "Shoulder Complex", pos: new THREE.Vector3( 0.27, 1.60, 0) }},
+          {{ label: "Elbow", pos: new THREE.Vector3(-0.34, 1.29, 0) }},
+          {{ label: "Elbow", pos: new THREE.Vector3( 0.34, 1.29, 0) }},
+          {{ label: "Wrist & Hand", pos: new THREE.Vector3(-0.41, 0.96, 0.02) }},
+          {{ label: "Wrist & Hand", pos: new THREE.Vector3( 0.41, 0.96, 0.02) }},
+          {{ label: "Hip & Groin", pos: new THREE.Vector3(-0.12, 0.88, 0) }},
+          {{ label: "Hip & Groin", pos: new THREE.Vector3( 0.12, 0.88, 0) }},
+          {{ label: "Knee Joint", pos: new THREE.Vector3(-0.115, 0.39, 0) }},
+          {{ label: "Knee Joint", pos: new THREE.Vector3( 0.115, 0.39, 0) }},
+          {{ label: "Ankle & Foot", pos: new THREE.Vector3(-0.115, -0.08, 0.03) }},
+          {{ label: "Ankle & Foot", pos: new THREE.Vector3( 0.115, -0.08, 0.03) }},
         ];
 
-        const markerMeshes = [];
-        nodes.forEach(n => {{
-          const isSel = activeRegions.has(n.label);
-          const mat = new THREE.MeshStandardMaterial({{
-            color: isSel ? 0xF47920 : 0x1B365D,
-            emissive: isSel ? 0x9A3412 : 0x000000,
-            roughness: 0.35
-          }});
-          const mesh = new THREE.Mesh(new THREE.SphereGeometry(isSel ? 0.075 : 0.058, 16, 16), mat);
-          mesh.position.set(n.pos[0], n.pos[1], n.pos[2]);
-          mesh.userData = {{ label: n.label }};
-          figure.add(mesh);
-          markerMeshes.push(mesh);
+        // Subtle anatomical landmark rings for already-selected regions
+        regionZones.forEach(z => {{
+          if (activeRegions.has(z.label)) {{
+            const glow = new THREE.Mesh(
+              new THREE.SphereGeometry(0.055, 16, 16),
+              new THREE.MeshBasicMaterial({{ color: 0xF47920, transparent: true, opacity: 0.45 }})
+            );
+            glow.position.copy(z.pos);
+            bodyGroup.add(glow);
+          }}
         }});
 
-        scene.add(figure);
+        const painPinsGroup = new THREE.Group();
+        bodyGroup.add(painPinsGroup);
+        const markedSpots = [];
 
-        let isDragging = false, prevX = 0, prevY = 0;
+        function getClosestRegion(localPt) {{
+          let best = regionZones[0].label;
+          let bestDist = Infinity;
+          regionZones.forEach(z => {{
+            const d = localPt.distanceTo(z.pos);
+            if (d < bestDist) {{
+              bestDist = d;
+              best = z.label;
+            }}
+          }});
+          const sideTag = localPt.x < -0.04 ? "Left " : (localPt.x > 0.04 ? "Right " : "Central ");
+          const depthTag = localPt.z < -0.03 ? "Posterior " : (localPt.z > 0.03 ? "Anterior " : "");
+          return {{ region: best, descriptor: sideTag + depthTag + best }};
+        }}
+
+        function placePainPin(localPt) {{
+          // Glowing red pain core + pulsing halo ring
+          const core = new THREE.Mesh(
+            new THREE.SphereGeometry(0.028, 16, 16),
+            new THREE.MeshStandardMaterial({{ color: 0xEF4444, emissive: 0xB91C1C, roughness: 0.2 }})
+          );
+          core.position.copy(localPt);
+
+          const halo = new THREE.Mesh(
+            new THREE.SphereGeometry(0.052, 16, 16),
+            new THREE.MeshBasicMaterial({{ color: 0xF97316, transparent: true, opacity: 0.42 }})
+          );
+          halo.position.copy(localPt);
+
+          painPinsGroup.add(core);
+          painPinsGroup.add(halo);
+
+          const info = getClosestRegion(localPt);
+          markedSpots.push(info.descriptor);
+          statusPill.textContent = "Marked: " + info.descriptor;
+          pinListEl.textContent = "Pain pins (" + markedSpots.length + "): " + markedSpots.slice(-2).join(", ");
+        }}
+
+        window.clearPins = function() {{
+          while (painPinsGroup.children.length > 0) {{
+            painPinsGroup.remove(painPinsGroup.children[0]);
+          }}
+          markedSpots.length = 0;
+          statusPill.textContent = "Pain pins cleared";
+          pinListEl.textContent = "Pain pins: 0";
+        }};
+
+        window.setView = function(rotY) {{
+          bodyGroup.rotation.y = rotY;
+          bodyGroup.rotation.x = 0;
+        }};
+
+        scene.add(bodyGroup);
+
+        let isDragging = false, moved = false, prevX = 0, prevY = 0;
         renderer.domElement.addEventListener('pointerdown', e => {{
-          isDragging = true; prevX = e.clientX; prevY = e.clientY;
+          isDragging = true; moved = false; prevX = e.clientX; prevY = e.clientY;
         }});
         window.addEventListener('pointerup', () => {{ isDragging = false; }});
+
+        renderer.domElement.addEventListener('wheel', e => {{
+          e.preventDefault();
+          camera.position.z = Math.max(2.1, Math.min(5.2, camera.position.z + e.deltaY * 0.002));
+        }}, {{ passive: false }});
 
         const raycaster = new THREE.Raycaster();
         const pointer = new THREE.Vector2();
 
-        function updatePointer(e) {{
-          const rect = renderer.domElement.getBoundingClientRect();
-          pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-          pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-        }}
-
         renderer.domElement.addEventListener('pointermove', e => {{
           if (isDragging) {{
-            figure.rotation.y += (e.clientX - prevX) * 0.012;
-            figure.rotation.x = Math.max(-0.5, Math.min(0.5, figure.rotation.x + (e.clientY - prevY) * 0.008));
+            const dx = e.clientX - prevX;
+            const dy = e.clientY - prevY;
+            if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved = true;
+            bodyGroup.rotation.y += dx * 0.012;
+            bodyGroup.rotation.x = Math.max(-0.45, Math.min(0.45, bodyGroup.rotation.x + dy * 0.008));
             prevX = e.clientX; prevY = e.clientY;
-            return;
-          }}
-          updatePointer(e);
-          raycaster.setFromCamera(pointer, camera);
-          const hits = raycaster.intersectObjects(markerMeshes);
-          if (hits.length > 0) {{
-            const lbl = hits[0].object.userData.label;
-            hoverEl.style.display = 'inline-block';
-            hoverEl.textContent = lbl + (activeRegions.has(lbl) ? ' (Selected)' : ' (Click to select)');
-            renderer.domElement.style.cursor = 'pointer';
-          }} else {{
-            hoverEl.style.display = 'none';
-            renderer.domElement.style.cursor = 'grab';
           }}
         }});
 
         renderer.domElement.addEventListener('click', e => {{
-          updatePointer(e);
+          if (moved) return;
+          const rect = renderer.domElement.getBoundingClientRect();
+          pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+          pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
           raycaster.setFromCamera(pointer, camera);
-          const hits = raycaster.intersectObjects(markerMeshes);
+          const hits = raycaster.intersectObjects(skinMeshes);
           if (hits.length > 0) {{
-            const lbl = hits[0].object.userData.label;
-            const url = new URL(window.parent.location.href);
-            const cur = new Set((url.searchParams.get('regions') || '').split('|').filter(Boolean));
-            if (cur.has(lbl)) cur.delete(lbl); else cur.add(lbl);
-            url.searchParams.set('regions', Array.from(cur).join('|'));
-            window.parent.history.replaceState({{}}, '', url.toString());
-            hoverEl.style.display = 'inline-block';
-            hoverEl.textContent = 'Toggled: ' + lbl + ' (syncing...)';
-            setTimeout(() => window.parent.location.reload(), 120);
+            const localPt = bodyGroup.worldToLocal(hits[0].point.clone());
+            placePainPin(localPt);
           }}
         }});
 
@@ -490,37 +613,47 @@ def render_3d_body_selector(selected_regions):
     </body>
     </html>
     """
-  components.html(html_code, height=440)
+  components.html(html_code, height=492)
 
 
-def generate_gemini_protocol(context_payload):
-  """Calls Gemini AI (gemini-2.5-flash) to analyze assessment findings and suggest a protocol."""
-  if not GEMINI_API_KEY:
+def generate_gemini_protocol(api_key, context_payload):
+  """Calls Gemini AI using google-genai SDK with automatic model fallback."""
+  if not api_key:
     return (
-        "⚠️ **Gemini API Key not configured.** Add `GEMINI_API_KEY` to your"
-        " Streamlit Secrets to enable live AI clinical protocol suggestions."
+        "⚠️ **Gemini API Key missing.** Paste your Gemini API key in the"
+        " left sidebar under **Gemini AI Settings** and click the analyze"
+        " button again."
     )
 
   prompt = f"""
 You are a clinical physiotherapy decision-support assistant for Dr. Geetanjali's PhysioWorks.
 Analyze the following patient assessment data and provide a clear, structured clinical protocol suggestion.
-Do NOT make a definitive medical diagnosis; frame findings as clinical hypotheses and support professional physiotherapy judgment.
+Frame findings as clinical hypotheses to support professional physiotherapy judgment (not a standalone medical diagnosis).
 
 Assessment Data:
 {json.dumps(context_payload, indent=2)}
 
-Format your response with clear headings:
-1. **Safety & Precaution Check** (flag any red flags, comorbidities, or high irritability precautions)
-2. **Clinical Impression & Key Impairments** (priority regions, pain/irritability pattern, ROM/neuro/MMT findings)
-3. **Suggested Treatment Protocol** (modalities, manual/exercise focus, sets/reps/dosage & progression rules)
-4. **Reassessment & Milestones** (key NPRS/ROM/functional markers to track at review)
+Format your response cleanly with these 4 sections:
+1. **Safety & Precaution Check** (flag any medical history precautions, red flags, or high irritability considerations)
+2. **Clinical Impression & Key Impairments** (priority body regions, pain/irritability behavior, ROM/neuro/MMT findings)
+3. **Suggested Treatment Protocol** (electrotherapy/modalities, manual therapy focus, targeted exercises with sets/reps/dosage & progression rules)
+4. **Reassessment & Milestones** (key NPRS, ROM, and functional markers to track at follow-up)
 """
-  client = genai.Client(api_key=GEMINI_API_KEY)
-  response = client.models.generate_content(
-      model="gemini-2.5-flash",
-      contents=prompt,
-  )
-  return response.text
+  client = genai.Client(api_key=api_key)
+  last_err = None
+  for model_name in ["gemini-2.5-flash", "gemini-2.0-flash"]:
+    try:
+      response = client.models.generate_content(
+          model=model_name,
+          contents=prompt,
+      )
+      if response and getattr(response, "text", None):
+        return response.text
+    except Exception as e:
+      last_err = e
+      continue
+
+  raise RuntimeError(f"Gemini API call failed: {last_err}")
 
 
 def _latin1_safe(text):
@@ -682,13 +815,6 @@ def create_assessment_pdf(
   return bytes(pdf.output())
 
 
-# Sync 3D marker clicks from query parameter if present
-if "regions" in st.query_params:
-  raw_reg = st.query_params.get("regions", "")
-  parsed_reg = [r for r in raw_reg.split("|") if r in BODY_REGIONS]
-  st.session_state["asm_body_parts"] = parsed_reg
-  st.query_params.clear()
-
 if "asm_body_parts" not in st.session_state:
   st.session_state["asm_body_parts"] = []
 
@@ -710,21 +836,24 @@ with st.sidebar:
       ],
   )
   st.markdown("---")
+  st.markdown("**🤖 Gemini AI Settings**")
+  st.text_input(
+      "Gemini API Key",
+      type="password",
+      key="gemini_api_key_input",
+      placeholder="Paste Gemini API key here",
+  )
+  GEMINI_API_KEY = st.session_state["gemini_api_key_input"].strip() or None
+
+  if GEMINI_API_KEY:
+    st.success("● Gemini AI: Ready")
+  else:
+    st.warning("● Gemini AI: Enter API Key Above")
+
   if db_connected:
     st.success("● Supabase Cloud Sync: Active")
   else:
     st.info("● Storage Mode: Session Memory")
-st.text_input(
-    "Gemini API Key",
-    type="password",
-    key="gemini_api_key_input",
-    placeholder="Paste Gemini key here",
-)
-GEMINI_API_KEY = st.session_state["gemini_api_key_input"].strip() or None
-  if GEMINI_API_KEY:
-    st.success("● Gemini AI: Ready")
-  else:
-    st.warning("● Gemini AI: Key Missing")
 
 # --- TOP BANNER & CLINIC SNAPSHOT ---
 patients_all = get_data("patients")
@@ -748,7 +877,7 @@ k2.metric("Assessments Completed", len(assessments_all))
 k3.metric("Treatment Sessions Logged", len(logs_all))
 
 # =====================================================================
-# 1. REDESIGNED CLINICAL ASSESSMENT (3D MODEL + FULL CRITERIA + GEMINI AI)
+# 1. REDESIGNED CLINICAL ASSESSMENT (3D HUMAN PAIN MAPPER + GEMINI AI)
 # =====================================================================
 if menu == "Clinical Assessment":
   pid_col = col_val(patients_all, ["patient_id", "Patient_ID"])
@@ -775,16 +904,16 @@ if menu == "Clinical Assessment":
           ):
             st.dataframe(p_asm, width="stretch", hide_index=True)
 
-    # --- STEP 1: 3D BODY MODEL & AFFECTED REGION SELECTION ---
+    # --- STEP 1: 3D HUMAN MODEL & PAIN MARKING ---
     st.markdown(
-        '<div class="ui-card"><div class="section-heading">1. Interactive 3D'
-        " Body Map & Affected Regions</div>",
+        '<div class="ui-card"><div class="section-heading">1. 3D Anatomical'
+        " Pain Map & Region Selection</div>",
         unsafe_allow_html=True,
     )
-    col_3d, col_reg = st.columns([1.05, 1.25])
+    col_3d, col_reg = st.columns([1.15, 1.15])
 
     with col_3d:
-      render_3d_body_selector(st.session_state["asm_body_parts"])
+      render_3d_human_pain_mapper(st.session_state["asm_body_parts"])
 
     with col_reg:
       body_parts = st.multiselect(
@@ -792,12 +921,16 @@ if menu == "Clinical Assessment":
           BODY_REGIONS,
           key="asm_body_parts",
       )
-      st.caption(
-          "Selected regions highlight in orange on the 3D mannequin and expand"
-          " region-specific examination fields below."
+      pain_spot_notes = st.text_input(
+          "Marked Pain Location(s) / Side & Tissue Note",
+          placeholder=(
+              "e.g., Right lateral epicondyle, Left L4-L5 paraspinal, Anterior"
+              " patellar tendon"
+          ),
+          key="asm_pain_spots",
       )
 
-      st.markdown("**Pain & Irritability (NPRS 0–10)**")
+      st.markdown("**Pain Intensity & Irritability (NPRS 0–10)**")
       p1, p2, p3 = st.columns(3)
       with p1:
         nprs_rest = st.slider("Rest", 0, 10, 0, key="nprs_rest_s")
@@ -835,8 +968,8 @@ if menu == "Clinical Assessment":
 
     if not body_parts:
       st.info(
-          "Select one or more body regions above (via the 3D model or dropdown)"
-          " to open region-specific ROM, neurological, and special test fields."
+          "Select one or more body regions above to open region-specific ROM,"
+          " neurological, and special test fields."
       )
 
     if "Cervical" in bp_str:
@@ -1095,6 +1228,7 @@ if menu == "Clinical Assessment":
           "patient_id": selected_patient,
           "medical_history_and_flags": patient_med_history or "None recorded",
           "affected_regions": body_parts or ["General"],
+          "marked_pain_locations": pain_spot_notes or "Not specified",
           "nprs": {
               "rest": nprs_rest,
               "activity": nprs_activity,
@@ -1108,9 +1242,11 @@ if menu == "Clinical Assessment":
       }
       with st.spinner("Analyzing assessment with Gemini AI..."):
         try:
-          st.session_state[ai_key] = generate_gemini_protocol(payload)
+          st.session_state[ai_key] = generate_gemini_protocol(
+              GEMINI_API_KEY, payload
+          )
         except Exception as e:
-          st.error(f"Gemini AI analysis error: {e}")
+          st.error(f"Gemini AI error: {e}")
 
     if st.session_state.get(ai_key):
       st.markdown(
@@ -1150,6 +1286,12 @@ if menu == "Clinical Assessment":
         if include_ai and st.session_state.get(ai_key):
           ai_note = f" | AI Protocol: {st.session_state[ai_key]}"
 
+        spot_note = (
+            f" | Pain Locations: {pain_spot_notes.strip()}"
+            if pain_spot_notes.strip()
+            else ""
+        )
+
         assessment_dict = {
             "assessment_id": assessment_id,
             "patient_id": selected_patient,
@@ -1158,7 +1300,7 @@ if menu == "Clinical Assessment":
             "assessment_details": (
                 f"NPRS[Rest:{nprs_rest}, Act:{nprs_activity},"
                 f" Night:{nprs_night}] | Irritability: {irritability} | Goal:"
-                f" {functional_goal} | MMT: {mmt_grade} | Details:"
+                f" {functional_goal}{spot_note} | MMT: {mmt_grade} | Details:"
                 f" {str(assessment_details_dict)}{ai_note}"
             ),
             "suggested_treatment": treatment_plan_input.strip() or default_plan,
