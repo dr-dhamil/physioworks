@@ -323,7 +323,7 @@ def render_patient_banner(patients_df, selected_pid):
 
 
 def render_true_3d_human_model(selected_regions):
-  """True 3D WebGL Human Anatomy Model (GLTFLoader .glb mesh with fallback) + surface pain-spot pins."""
+  """True 3D WebGL Human Anatomy Model with live model switcher, camera presets & surface pain pins."""
   active_json = json.dumps(selected_regions)
   html_code = f"""
     <!DOCTYPE html>
@@ -336,7 +336,7 @@ def render_true_3d_human_model(selected_regions):
           color: #F8FAFC;
         }}
         #wrap {{
-          position: relative; width: 100%; height: 495px;
+          position: relative; width: 100%; height: 500px;
           border-radius: 12px; overflow: hidden; border: 1px solid #334155;
           background: radial-gradient(circle at 50% 38%, #1E293B 0%, #0B1324 100%);
         }}
@@ -345,14 +345,14 @@ def render_true_3d_human_model(selected_regions):
           display: flex; justify-content: space-between; align-items: center;
           gap: 6px; z-index: 20; flex-wrap: wrap;
         }}
-        .btn-row {{ display: flex; gap: 5px; flex-wrap: wrap; }}
-        .vbtn {{
-          background: rgba(27, 54, 93, 0.92); color: #F8FAFC;
-          border: 1px solid #475569; padding: 5px 10px; border-radius: 6px;
+        .btn-row {{ display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }}
+        .vbtn, select.vbtn {{
+          background: rgba(27, 54, 93, 0.94); color: #F8FAFC;
+          border: 1px solid #475569; padding: 5px 9px; border-radius: 6px;
           font-size: 11px; font-weight: 600; cursor: pointer;
         }}
-        .vbtn:hover {{ background: #F47920; border-color: #F47920; }}
-        .vbtn.clear {{ background: rgba(153, 27, 27, 0.9); border-color: #DC2626; }}
+        .vbtn:hover, select.vbtn:hover {{ background: #F47920; border-color: #F47920; }}
+        .vbtn.clear {{ background: rgba(153, 27, 27, 0.92); border-color: #DC2626; }}
         #badge {{
           background: rgba(244, 121, 32, 0.95); color: #FFFFFF;
           padding: 5px 11px; border-radius: 999px; font-size: 11px; font-weight: 700;
@@ -370,16 +370,23 @@ def render_true_3d_human_model(selected_regions):
       <div id="wrap">
         <div class="top-hud">
           <div class="btn-row">
-            <button class="vbtn" onclick="setAngle(0)">Front (Anterior)</button>
-            <button class="vbtn" onclick="setAngle(Math.PI)">Back (Posterior)</button>
-            <button class="vbtn" onclick="setAngle(Math.PI/2)">Left Side</button>
-            <button class="vbtn" onclick="setAngle(-Math.PI/2)">Right Side</button>
-            <button class="vbtn clear" onclick="clearPins()">Clear Pain Pins</button>
+            <select id="model-switcher" class="vbtn" onchange="switchModel(this.value)">
+              <option value="https://threejs.org/examples/models/gltf/Soldier.glb">Model: Soldier</option>
+              <option value="https://threejs.org/examples/models/gltf/Xbot.glb">Model: Xbot</option>
+              <option value="https://threejs.org/examples/models/gltf/Ybot.glb">Model: Ybot</option>
+              <option value="https://threejs.org/examples/models/gltf/Michelle.glb">Model: Michelle</option>
+              <option value="./anatomy_body.glb">Model: Custom (./anatomy_body.glb)</option>
+            </select>
+            <button class="vbtn" onclick="setAngle(0)">Front</button>
+            <button class="vbtn" onclick="setAngle(Math.PI)">Back</button>
+            <button class="vbtn" onclick="setAngle(Math.PI/2)">Left</button>
+            <button class="vbtn" onclick="setAngle(-Math.PI/2)">Right</button>
+            <button class="vbtn clear" onclick="clearPins()">Clear Pins</button>
           </div>
-          <span id="badge">3D Human Model • Click skin to mark pain</span>
+          <span id="badge">Loading 3D Soldier...</span>
         </div>
         <div class="bottom-hud">
-          <span>360° Drag to Rotate • Scroll to Zoom • Click anywhere on 3D body to drop numbered pain pin</span>
+          <span>360° Drag to Rotate • Scroll to Zoom • Click 3D body to place pain pin</span>
           <span id="pin-readout">Pain pins: 0</span>
         </div>
       </div>
@@ -402,7 +409,6 @@ def render_true_3d_human_model(selected_regions):
         renderer.outputEncoding = THREE.sRGBEncoding;
         container.appendChild(renderer.domElement);
 
-        // 3-point clinical studio lighting
         scene.add(new THREE.AmbientLight(0xE2E8F0, 0.65));
         const keyLight = new THREE.DirectionalLight(0xFFF7ED, 0.95);
         keyLight.position.set(2.5, 4.5, 3.5);
@@ -414,7 +420,6 @@ def render_true_3d_human_model(selected_regions):
         fillLight.position.set(0, -2.0, 2.5);
         scene.add(fillLight);
 
-        // Turntable grid base
         const gridHelper = new THREE.PolarGridHelper(0.65, 16, 4, 48, 0x334155, 0x1E293B);
         gridHelper.position.y = 0.0;
         scene.add(gridHelper);
@@ -422,12 +427,18 @@ def render_true_3d_human_model(selected_regions):
         const rootGroup = new THREE.Group();
         scene.add(rootGroup);
 
-        const clickableMeshes = [];
+        const modelHolder = new THREE.Group();
+        rootGroup.add(modelHolder);
+
+        const glowHolder = new THREE.Group();
+        rootGroup.add(glowHolder);
+
         const painPinsGroup = new THREE.Group();
         rootGroup.add(painPinsGroup);
+
+        let clickableMeshes = [];
         const markedPins = [];
 
-        // Normalized anatomical zones (for model height 0.0 to 1.80)
         const regionZones = [
           {{ label: "TMJ / Jaw", pos: new THREE.Vector3(0, 1.56, 0.08) }},
           {{ label: "Cervical Spine (Neck)", pos: new THREE.Vector3(0, 1.46, -0.02) }},
@@ -447,7 +458,10 @@ def render_true_3d_human_model(selected_regions):
           {{ label: "Ankle & Foot", pos: new THREE.Vector3( 0.10, 0.08, 0.04) }},
         ];
 
-        function addSelectedRegionGlows() {{
+        function refreshRegionGlows() {{
+          while (glowHolder.children.length > 0) {{
+            glowHolder.remove(glowHolder.children[0]);
+          }}
           regionZones.forEach(z => {{
             if (activeRegions.has(z.label)) {{
               const halo = new THREE.Mesh(
@@ -455,12 +469,20 @@ def render_true_3d_human_model(selected_regions):
                 new THREE.MeshBasicMaterial({{ color: 0xF47920, transparent: true, opacity: 0.48 }})
               );
               halo.position.copy(z.pos);
-              rootGroup.add(halo);
+              glowHolder.add(halo);
             }}
           }});
         }}
 
-        function buildFallbackSculptedHuman() {{
+        function clearCurrentModel() {{
+          while (modelHolder.children.length > 0) {{
+            modelHolder.remove(modelHolder.children[0]);
+          }}
+          clickableMeshes = [];
+        }}
+
+        function buildProceduralFallback() {{
+          clearCurrentModel();
           const skinMat = new THREE.MeshStandardMaterial({{
             color: 0xD6B098, roughness: 0.46, metalness: 0.04
           }});
@@ -468,12 +490,12 @@ def render_true_3d_human_model(selected_regions):
             const g = new THREE.LatheGeometry(pts.map(p => new THREE.Vector2(p[0], p[1])), 28);
             const m = new THREE.Mesh(g, skinMat);
             m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.rotation.z = rz;
-            rootGroup.add(m); clickableMeshes.push(m);
+            modelHolder.add(m); clickableMeshes.push(m);
           }}
           function sphere(r, x, y, z, sx=1, sy=1, sz=1) {{
             const m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 20), skinMat);
             m.position.set(x, y, z); m.scale.set(sx, sy, sz);
-            rootGroup.add(m); clickableMeshes.push(m);
+            modelHolder.add(m); clickableMeshes.push(m);
           }}
           sphere(0.115, 0, 1.66, 0, 0.9, 1.15, 1.0);
           sphere(0.085, 0, 1.56, 0.03, 0.85, 0.85, 0.9);
@@ -487,52 +509,59 @@ def render_true_3d_human_model(selected_regions):
             lathe([[0.036,0],[0.052,0.38]], s*0.095, 0.08, -0.01);
             sphere(0.04, s*0.095, 0.03, 0.045, 0.9, 0.5, 1.8);
           }});
-          addSelectedRegionGlows();
+          badgeEl.textContent = "Fallback 3D Model • Click skin to mark pain";
         }}
 
-        // Load genuine 3D human character GLB model via Three.js GLTFLoader
         const loader = new THREE.GLTFLoader();
-        const glbUrl = "https://threejs.org/examples/models/gltf/Michelle.glb";
 
-        loader.load(
-          glbUrl,
-          function(gltf) {{
-            const model = gltf.scene;
-            const box = new THREE.Box3().setFromObject(model);
-            const size = new THREE.Vector3();
-            box.getSize(size);
-            const scaleFactor = 1.76 / (size.y || 1);
-            model.scale.setScalar(scaleFactor);
+        window.switchModel = function(url, isRetryFallback = false) {{
+          badgeEl.textContent = "Loading 3D model...";
+          loader.load(
+            url,
+            function(gltf) {{
+              clearCurrentModel();
+              const model = gltf.scene;
+              const box = new THREE.Box3().setFromObject(model);
+              const size = new THREE.Vector3();
+              box.getSize(size);
+              const scaleFactor = 1.76 / (size.y || 1);
+              model.scale.setScalar(scaleFactor);
 
-            const scaledBox = new THREE.Box3().setFromObject(model);
-            const center = new THREE.Vector3();
-            scaledBox.getCenter(center);
-            model.position.x = -center.x;
-            model.position.z = -center.z;
-            model.position.y = -scaledBox.min.y;
+              const scaledBox = new THREE.Box3().setFromObject(model);
+              const center = new THREE.Vector3();
+              scaledBox.getCenter(center);
+              model.position.x = -center.x;
+              model.position.z = -center.z;
+              model.position.y = -scaledBox.min.y;
 
-            const clinicalMat = new THREE.MeshStandardMaterial({{
-              color: 0xCBD5E1,
-              roughness: 0.45,
-              metalness: 0.08
-            }});
+              const clinicalMat = new THREE.MeshStandardMaterial({{
+                color: 0xCBD5E1,
+                roughness: 0.45,
+                metalness: 0.08
+              }});
 
-            model.traverse(child => {{
-              if (child.isMesh) {{
-                child.material = clinicalMat;
-                clickableMeshes.push(child);
+              model.traverse(child => {{
+                if (child.isMesh) {{
+                  child.material = clinicalMat;
+                  clickableMeshes.push(child);
+                }}
+              }});
+
+              modelHolder.add(model);
+              const labelName = url.split('/').pop().replace('.glb', '');
+              badgeEl.textContent = `3D: ${{labelName}} • Click body to mark pain`;
+            }},
+            undefined,
+            function() {{
+              if (!isRetryFallback && url !== "https://threejs.org/examples/models/gltf/Soldier.glb") {{
+                document.getElementById('model-switcher').value = "https://threejs.org/examples/models/gltf/Soldier.glb";
+                window.switchModel("https://threejs.org/examples/models/gltf/Soldier.glb", true);
+              }} else {{
+                buildProceduralFallback();
               }}
-            }});
-
-            rootGroup.add(model);
-            addSelectedRegionGlows();
-            badgeEl.textContent = "3D Human Anatomy Loaded • Click body to mark pain";
-          }},
-          undefined,
-          function() {{
-            buildFallbackSculptedHuman();
-          }}
-        );
+            }}
+          );
+        }};
 
         function classifyPoint(pt) {{
           let best = regionZones[0].label;
@@ -620,6 +649,9 @@ def render_true_3d_human_model(selected_regions):
           }}
         }});
 
+        refreshRegionGlows();
+        window.switchModel(document.getElementById('model-switcher').value);
+
         function animate() {{
           requestAnimationFrame(animate);
           renderer.render(scene, camera);
@@ -629,11 +661,11 @@ def render_true_3d_human_model(selected_regions):
     </body>
     </html>
     """
-  components.html(html_code, height=508)
+  components.html(html_code, height=514)
 
 
 def generate_gemini_protocol(api_key, context_payload):
-  """Calls Gemini (gemini-3.8-flash / gemini-3.5-flash-lite) via google-genai SDK & REST fallback."""
+  """Calls Gemini via google-genai SDK first, with direct REST API fallback."""
   if not api_key:
     return (
         "⚠️ **Gemini API Key missing.** Set `EMBEDDED_GEMINI_API_KEY` in `app.py`"
@@ -914,7 +946,7 @@ k2.metric("Assessments Completed", len(assessments_all))
 k3.metric("Treatment Sessions Logged", len(logs_all))
 
 # =====================================================================
-# 1. CLINICAL ASSESSMENT (TRUE 3D HUMAN MODEL + GEMINI AI)
+# 1. CLINICAL ASSESSMENT (3D MODEL SWITCHER + GEMINI AI)
 # =====================================================================
 if menu == "Clinical Assessment":
   pid_col = col_val(patients_all, ["patient_id", "Patient_ID"])
