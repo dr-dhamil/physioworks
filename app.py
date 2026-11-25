@@ -1,5 +1,6 @@
 import datetime
 import json
+import os
 from fpdf import FPDF
 from google import genai
 import pandas as pd
@@ -55,10 +56,6 @@ st.markdown(
         background-color: rgba(255, 255, 255, 0.12);
         color: #FFFFFF !important;
         border-color: rgba(255, 255, 255, 0.25);
-    }
-    [data-testid="stSidebar"] input {
-        background-color: rgba(255, 255, 255, 0.14) !important;
-        color: #FFFFFF !important;
     }
 
     .clinic-banner {
@@ -199,15 +196,33 @@ try:
 except Exception as e:
   st.sidebar.error(f"Supabase connection error: {e}")
 
-# --- GEMINI AI KEY INITIALIZATION ---
-secret_gemini_key = ""
-try:
-  secret_gemini_key = st.secrets.get("GEMINI_API_KEY") or ""
-except Exception:
-  secret_gemini_key = ""
+# --- EMBEDDED GEMINI AI KEY SETUP ---
+# Paste your Gemini API key below (note: public GitHub repos expose file text publicly).
+EMBEDDED_GEMINI_API_KEY = "AQ.Ab8RN6K26e4f7O1tNNVWO_noxvmfeQhelPHr5cBbpbrBbQ0dPg"
 
-if "gemini_api_key_input" not in st.session_state:
-  st.session_state["gemini_api_key_input"] = secret_gemini_key
+
+def get_gemini_api_key():
+  try:
+    secret_val = st.secrets.get("GEMINI_API_KEY")
+    if secret_val and str(secret_val).strip():
+      return str(secret_val).strip()
+  except Exception:
+    pass
+
+  env_val = os.environ.get("GEMINI_API_KEY")
+  if env_val and env_val.strip():
+    return env_val.strip()
+
+  if (
+      EMBEDDED_GEMINI_API_KEY
+      and EMBEDDED_GEMINI_API_KEY != "YOUR_ACTUAL_GEMINI_API_KEY_HERE"
+  ):
+    return EMBEDDED_GEMINI_API_KEY.strip()
+
+  return None
+
+
+GEMINI_API_KEY = get_gemini_api_key()
 
 
 def get_data(table_name):
@@ -309,7 +324,7 @@ def render_patient_banner(patients_df, selected_pid):
 
 
 def render_interactive_body_chart(selected_regions):
-  """Option B: Crisp Anterior/Posterior clinical SVG body map with direct pain-spot pins & region highlights."""
+  """Option B: Anterior/Posterior clinical SVG body map with direct pain-spot pins & region highlights."""
   active_json = json.dumps(selected_regions)
   html_code = f"""
     <!DOCTYPE html>
@@ -374,91 +389,50 @@ def render_interactive_body_chart(selected_regions):
       </div>
 
       <div class="canvas-box">
-        <!-- ANTERIOR (FRONT) SVG -->
         <svg id="svg-front" viewBox="0 0 260 430">
-          <!-- Head & TMJ -->
           <ellipse class="body-part" data-region="TMJ / Jaw" cx="130" cy="42" rx="28" ry="34" />
           <circle class="body-part" data-region="TMJ / Jaw" cx="101" cy="48" r="6" />
           <circle class="body-part" data-region="TMJ / Jaw" cx="159" cy="48" r="6" />
-
-          <!-- Cervical (Neck) -->
           <rect class="body-part" data-region="Cervical Spine (Neck)" x="114" y="74" width="32" height="22" rx="6" />
-
-          <!-- Shoulders -->
           <ellipse class="body-part" data-region="Shoulder Complex" cx="84" cy="112" rx="22" ry="16" />
           <ellipse class="body-part" data-region="Shoulder Complex" cx="176" cy="112" rx="22" ry="16" />
-
-          <!-- Chest / Thoracic Front -->
           <path class="body-part" data-region="Thoracic Spine (Upper Back)" d="M98,98 L162,98 L156,154 L104,154 Z" />
-
-          <!-- Abdomen / Lumbar Front -->
           <path class="body-part" data-region="Lumbar Spine (Lower Back)" d="M104,154 L156,154 L160,196 L100,196 Z" />
-
-          <!-- Pelvis & Hip/Groin -->
           <path class="body-part" data-region="Hip & Groin" d="M100,196 L160,196 L166,224 L94,224 Z" />
           <ellipse class="body-part" data-region="Hip & Groin" cx="102" cy="216" rx="16" ry="12" />
           <ellipse class="body-part" data-region="Hip & Groin" cx="158" cy="216" rx="16" ry="12" />
-
-          <!-- Upper Arms -->
           <rect class="body-part" data-region="Shoulder Complex" x="62" y="126" width="22" height="54" rx="10" transform="rotate(6 73 153)" />
           <rect class="body-part" data-region="Shoulder Complex" x="176" y="126" width="22" height="54" rx="10" transform="rotate(-6 187 153)" />
-
-          <!-- Elbows -->
           <circle class="body-part" data-region="Elbow" cx="70" cy="184" r="11" />
           <circle class="body-part" data-region="Elbow" cx="190" cy="184" r="11" />
-
-          <!-- Forearms -->
           <rect class="body-part" data-region="Elbow" x="55" y="194" width="20" height="52" rx="9" transform="rotate(8 65 220)" />
           <rect class="body-part" data-region="Elbow" x="185" y="194" width="20" height="52" rx="9" transform="rotate(-8 195 220)" />
-
-          <!-- Wrist & Hand -->
           <ellipse class="body-part" data-region="Wrist & Hand" cx="56" cy="256" rx="12" ry="18" transform="rotate(10 56 256)" />
           <ellipse class="body-part" data-region="Wrist & Hand" cx="204" cy="256" rx="12" ry="18" transform="rotate(-10 204 256)" />
-
-          <!-- Thighs -->
           <path class="body-part" data-region="Hip & Groin" d="M96,224 L126,224 L122,302 L92,302 Z" />
           <path class="body-part" data-region="Hip & Groin" d="M134,224 L164,224 L168,302 L138,302 Z" />
-
-          <!-- Knees -->
           <ellipse class="body-part" data-region="Knee Joint" cx="107" cy="310" rx="15" ry="14" />
           <ellipse class="body-part" data-region="Knee Joint" cx="153" cy="310" rx="15" ry="14" />
-
-          <!-- Lower Legs / Shins -->
-          <path class="body-part" data-region="Knee Joint" x="93" d="M93,324 L121,324 L117,384 L97,384 Z" />
-          <path class="body-part" data-region="Knee Joint" x="139" d="M139,324 L167,324 L163,384 L143,384 Z" />
-
-          <!-- Ankle & Foot -->
+          <path class="body-part" data-region="Knee Joint" d="M93,324 L121,324 L117,384 L97,384 Z" />
+          <path class="body-part" data-region="Knee Joint" d="M139,324 L167,324 L163,384 L143,384 Z" />
           <ellipse class="body-part" data-region="Ankle & Foot" cx="106" cy="392" rx="13" ry="9" />
           <ellipse class="body-part" data-region="Ankle & Foot" cx="154" cy="392" rx="13" ry="9" />
           <path class="body-part" data-region="Ankle & Foot" d="M92,398 L118,398 L116,422 L86,422 Z" />
           <path class="body-part" data-region="Ankle & Foot" d="M142,398 L168,398 L174,422 L144,422 Z" />
-
           <g id="pins-front"></g>
         </svg>
 
-        <!-- POSTERIOR (BACK) SVG -->
         <svg id="svg-back" viewBox="0 0 260 430" style="display:none;">
-          <!-- Head Back & Neck -->
           <ellipse class="body-part" data-region="Cervical Spine (Neck)" cx="130" cy="42" rx="28" ry="34" />
           <rect class="body-part" data-region="Cervical Spine (Neck)" x="114" y="74" width="32" height="22" rx="6" />
-
-          <!-- Upper Back / Thoracic & Scapulae -->
           <path class="body-part" data-region="Thoracic Spine (Upper Back)" d="M96,98 L164,98 L158,156 L102,156 Z" />
           <ellipse class="body-part" data-region="Thoracic Spine (Upper Back)" cx="108" cy="124" rx="15" ry="20" />
           <ellipse class="body-part" data-region="Thoracic Spine (Upper Back)" cx="152" cy="124" rx="15" ry="20" />
-
-          <!-- Shoulders Posterior -->
           <ellipse class="body-part" data-region="Shoulder Complex" cx="84" cy="112" rx="22" ry="16" />
           <ellipse class="body-part" data-region="Shoulder Complex" cx="176" cy="112" rx="22" ry="16" />
-
-          <!-- Lumbar Spine (Lower Back) -->
           <path class="body-part" data-region="Lumbar Spine (Lower Back)" d="M102,156 L158,156 L162,196 L98,196 Z" />
-
-          <!-- Glutes / Hip Posterior -->
           <ellipse class="body-part" data-region="Hip & Groin" cx="111" cy="212" rx="18" ry="16" />
           <ellipse class="body-part" data-region="Hip & Groin" cx="149" cy="212" rx="18" ry="16" />
-
-          <!-- Arms & Elbows & Wrists -->
           <rect class="body-part" data-region="Shoulder Complex" x="62" y="126" width="22" height="54" rx="10" transform="rotate(6 73 153)" />
           <rect class="body-part" data-region="Shoulder Complex" x="176" y="126" width="22" height="54" rx="10" transform="rotate(-6 187 153)" />
           <circle class="body-part" data-region="Elbow" cx="70" cy="184" r="11" />
@@ -467,25 +441,16 @@ def render_interactive_body_chart(selected_regions):
           <rect class="body-part" data-region="Elbow" x="185" y="194" width="20" height="52" rx="9" transform="rotate(-8 195 220)" />
           <ellipse class="body-part" data-region="Wrist & Hand" cx="56" cy="256" rx="12" ry="18" transform="rotate(10 56 256)" />
           <ellipse class="body-part" data-region="Wrist & Hand" cx="204" cy="256" rx="12" ry="18" transform="rotate(-10 204 256)" />
-
-          <!-- Hamstrings -->
           <path class="body-part" data-region="Hip & Groin" d="M95,226 L126,226 L122,302 L92,302 Z" />
           <path class="body-part" data-region="Hip & Groin" d="M134,226 L165,226 L168,302 L138,302 Z" />
-
-          <!-- Back of Knee -->
           <ellipse class="body-part" data-region="Knee Joint" cx="107" cy="310" rx="14" ry="13" />
           <ellipse class="body-part" data-region="Knee Joint" cx="153" cy="310" rx="14" ry="13" />
-
-          <!-- Calves -->
           <path class="body-part" data-region="Knee Joint" d="M93,324 L121,324 L117,384 L97,384 Z" />
           <path class="body-part" data-region="Knee Joint" d="M139,324 L167,324 L163,384 L143,384 Z" />
-
-          <!-- Heel & Ankle -->
           <ellipse class="body-part" data-region="Ankle & Foot" cx="106" cy="392" rx="13" ry="9" />
           <ellipse class="body-part" data-region="Ankle & Foot" cx="154" cy="392" rx="13" ry="9" />
           <rect class="body-part" data-region="Ankle & Foot" x="92" y="400" width="26" height="20" rx="5" />
           <rect class="body-part" data-region="Ankle & Foot" x="142" y="400" width="26" height="20" rx="5" />
-
           <g id="pins-back"></g>
         </svg>
       </div>
@@ -583,11 +548,11 @@ def render_interactive_body_chart(selected_regions):
 
 
 def generate_gemini_protocol(api_key, context_payload):
-  """Calls Gemini via google-genai SDK first, with direct REST API fallback."""
+  """Calls Gemini (gemini-3.8-flash / gemini-3.5-flash-lite) via google-genai SDK & REST fallback."""
   if not api_key:
     return (
-        "⚠️ **Gemini API Key missing.** Paste your Gemini API key in the"
-        " left sidebar under **Gemini AI Settings**."
+        "⚠️ **Gemini API Key missing.** Set `EMBEDDED_GEMINI_API_KEY` in `app.py`"
+        " or configure `GEMINI_API_KEY`."
     )
 
   prompt = f"""
@@ -605,10 +570,9 @@ Format your response cleanly with these 4 sections:
 4. **Reassessment & Milestones** (key NPRS, ROM, and functional markers to track at follow-up)
 """
 
-  models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash"]
+  models_to_try = ["gemini-3.8-flash", "gemini-3.5-flash-lite"]
   errors = []
 
-  # Attempt 1: Official google-genai SDK
   try:
     client = genai.Client(api_key=api_key)
     for model_name in models_to_try:
@@ -625,9 +589,10 @@ Format your response cleanly with these 4 sections:
   except Exception as e:
     errors.append(f"SDK init: {e}")
 
-  # Attempt 2: Direct Gemini REST endpoint fallback
   for model_name in models_to_try:
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+    )
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     try:
       r = requests.post(
@@ -832,19 +797,10 @@ with st.sidebar:
       ],
   )
   st.markdown("---")
-  st.markdown("**🤖 Gemini AI Settings**")
-  st.text_input(
-      "Gemini API Key",
-      type="password",
-      key="gemini_api_key_input",
-      placeholder="Paste Gemini API key here",
-  )
-  GEMINI_API_KEY = st.session_state["gemini_api_key_input"].strip() or None
-
   if GEMINI_API_KEY:
-    st.success("● Gemini AI: Ready")
+    st.success("● Gemini AI: Ready (Embedded)")
   else:
-    st.warning("● Gemini AI: Enter API Key Above")
+    st.warning("● Gemini AI: Add Key in Code")
 
   if db_connected:
     st.success("● Supabase Cloud Sync: Active")
@@ -873,7 +829,7 @@ k2.metric("Assessments Completed", len(assessments_all))
 k3.metric("Treatment Sessions Logged", len(logs_all))
 
 # =====================================================================
-# 1. REDESIGNED CLINICAL ASSESSMENT (OPTION B BODY CHART + GEMINI AI)
+# 1. CLINICAL ASSESSMENT (BODY CHART + FULL CRITERIA + GEMINI AI)
 # =====================================================================
 if menu == "Clinical Assessment":
   pid_col = col_val(patients_all, ["patient_id", "Patient_ID"])
