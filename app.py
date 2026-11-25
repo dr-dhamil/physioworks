@@ -197,7 +197,6 @@ except Exception as e:
   st.sidebar.error(f"Supabase connection error: {e}")
 
 # --- EMBEDDED GEMINI AI KEY SETUP ---
-# Paste your Gemini API key below (note: public GitHub repos expose file text publicly).
 EMBEDDED_GEMINI_API_KEY = "AQ.Ab8RN6K26e4f7O1tNNVWO_noxvmfeQhelPHr5cBbpbrBbQ0dPg"
 
 
@@ -323,8 +322,8 @@ def render_patient_banner(patients_df, selected_pid):
   return p_hist
 
 
-def render_interactive_body_chart(selected_regions):
-  """Option B: Anterior/Posterior clinical SVG body map with direct pain-spot pins & region highlights."""
+def render_true_3d_human_model(selected_regions):
+  """True 3D WebGL Human Anatomy Model (GLTFLoader .glb mesh with fallback) + surface pain-spot pins."""
   active_json = json.dumps(selected_regions)
   html_code = f"""
     <!DOCTYPE html>
@@ -332,219 +331,305 @@ def render_interactive_body_chart(selected_regions):
     <head>
       <style>
         body {{
-          margin: 0; padding: 10px; background: #FFFFFF;
+          margin: 0; background: #0B1324;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-          color: #1E293B;
+          color: #F8FAFC;
         }}
-        .toolbar {{
+        #wrap {{
+          position: relative; width: 100%; height: 495px;
+          border-radius: 12px; overflow: hidden; border: 1px solid #334155;
+          background: radial-gradient(circle at 50% 38%, #1E293B 0%, #0B1324 100%);
+        }}
+        .top-hud {{
+          position: absolute; top: 10px; left: 10px; right: 10px;
           display: flex; justify-content: space-between; align-items: center;
-          gap: 8px; margin-bottom: 8px; flex-wrap: wrap;
+          gap: 6px; z-index: 20; flex-wrap: wrap;
         }}
-        .btn-group {{ display: flex; gap: 6px; }}
-        .tbtn {{
-          border: 1px solid #CBD5E1; background: #F8FAFC; color: #1B365D;
-          padding: 5px 11px; border-radius: 7px; font-size: 12px; font-weight: 600;
-          cursor: pointer; transition: all 0.15s ease;
+        .btn-row {{ display: flex; gap: 5px; flex-wrap: wrap; }}
+        .vbtn {{
+          background: rgba(27, 54, 93, 0.92); color: #F8FAFC;
+          border: 1px solid #475569; padding: 5px 10px; border-radius: 6px;
+          font-size: 11px; font-weight: 600; cursor: pointer;
         }}
-        .tbtn.active {{
-          background: #1B365D; color: #FFFFFF; border-color: #1B365D;
+        .vbtn:hover {{ background: #F47920; border-color: #F47920; }}
+        .vbtn.clear {{ background: rgba(153, 27, 27, 0.9); border-color: #DC2626; }}
+        #badge {{
+          background: rgba(244, 121, 32, 0.95); color: #FFFFFF;
+          padding: 5px 11px; border-radius: 999px; font-size: 11px; font-weight: 700;
         }}
-        .tbtn.clear {{
-          background: #FEF2F2; color: #B91C1C; border-color: #FECACA;
-        }}
-        .status-chip {{
-          background: #FFF7ED; border: 1px solid #FDBA74; color: #9A3412;
-          padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700;
-        }}
-        .canvas-box {{
-          position: relative; width: 100%; height: 390px;
-          border: 1px solid #E2E8F0; border-radius: 10px; background: #F8FAFC;
-          display: flex; justify-content: center; align-items: center; overflow: hidden;
-        }}
-        svg {{ height: 374px; width: auto; user-select: none; }}
-        .body-part {{
-          fill: #E2E8F0; stroke: #64748B; stroke-width: 1.6;
-          cursor: pointer; transition: fill 0.15s ease;
-        }}
-        .body-part:hover {{ fill: #FED7AA; }}
-        .body-part.selected {{ fill: #F47920; stroke: #9A3412; stroke-width: 2; }}
-        .pin-dot {{ fill: #DC2626; stroke: #FFFFFF; stroke-width: 1.5; }}
-        .pin-ring {{ fill: none; stroke: #F47920; stroke-width: 1.5; opacity: 0.85; }}
-        .pin-num {{ font-size: 9px; font-weight: 700; fill: #FFFFFF; text-anchor: middle; dominant-baseline: central; pointer-events: none; }}
-        .footer-bar {{
-          margin-top: 8px; font-size: 11px; color: #475569;
+        .bottom-hud {{
+          position: absolute; bottom: 10px; left: 10px; right: 10px;
+          background: rgba(15, 23, 42, 0.88); border: 1px solid #334155;
+          border-radius: 8px; padding: 7px 12px; font-size: 11px; color: #CBD5E1;
           display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap;
         }}
-        .pin-summary {{ color: #1B365D; font-weight: 600; }}
+        #pin-readout {{ color: #FDBA74; font-weight: 600; }}
       </style>
     </head>
     <body>
-      <div class="toolbar">
-        <div class="btn-group">
-          <button id="btn-front" class="tbtn active" onclick="setSide('front')">Anterior (Front)</button>
-          <button id="btn-back" class="tbtn" onclick="setSide('back')">Posterior (Back)</button>
-          <button class="tbtn clear" onclick="clearAllPins()">Clear Pins</button>
+      <div id="wrap">
+        <div class="top-hud">
+          <div class="btn-row">
+            <button class="vbtn" onclick="setAngle(0)">Front (Anterior)</button>
+            <button class="vbtn" onclick="setAngle(Math.PI)">Back (Posterior)</button>
+            <button class="vbtn" onclick="setAngle(Math.PI/2)">Left Side</button>
+            <button class="vbtn" onclick="setAngle(-Math.PI/2)">Right Side</button>
+            <button class="vbtn clear" onclick="clearPins()">Clear Pain Pins</button>
+          </div>
+          <span id="badge">3D Human Model • Click skin to mark pain</span>
         </div>
-        <span id="hover-readout" class="status-chip">Click body to mark pain point</span>
+        <div class="bottom-hud">
+          <span>360° Drag to Rotate • Scroll to Zoom • Click anywhere on 3D body to drop numbered pain pin</span>
+          <span id="pin-readout">Pain pins: 0</span>
+        </div>
       </div>
 
-      <div class="canvas-box">
-        <svg id="svg-front" viewBox="0 0 260 430">
-          <ellipse class="body-part" data-region="TMJ / Jaw" cx="130" cy="42" rx="28" ry="34" />
-          <circle class="body-part" data-region="TMJ / Jaw" cx="101" cy="48" r="6" />
-          <circle class="body-part" data-region="TMJ / Jaw" cx="159" cy="48" r="6" />
-          <rect class="body-part" data-region="Cervical Spine (Neck)" x="114" y="74" width="32" height="22" rx="6" />
-          <ellipse class="body-part" data-region="Shoulder Complex" cx="84" cy="112" rx="22" ry="16" />
-          <ellipse class="body-part" data-region="Shoulder Complex" cx="176" cy="112" rx="22" ry="16" />
-          <path class="body-part" data-region="Thoracic Spine (Upper Back)" d="M98,98 L162,98 L156,154 L104,154 Z" />
-          <path class="body-part" data-region="Lumbar Spine (Lower Back)" d="M104,154 L156,154 L160,196 L100,196 Z" />
-          <path class="body-part" data-region="Hip & Groin" d="M100,196 L160,196 L166,224 L94,224 Z" />
-          <ellipse class="body-part" data-region="Hip & Groin" cx="102" cy="216" rx="16" ry="12" />
-          <ellipse class="body-part" data-region="Hip & Groin" cx="158" cy="216" rx="16" ry="12" />
-          <rect class="body-part" data-region="Shoulder Complex" x="62" y="126" width="22" height="54" rx="10" transform="rotate(6 73 153)" />
-          <rect class="body-part" data-region="Shoulder Complex" x="176" y="126" width="22" height="54" rx="10" transform="rotate(-6 187 153)" />
-          <circle class="body-part" data-region="Elbow" cx="70" cy="184" r="11" />
-          <circle class="body-part" data-region="Elbow" cx="190" cy="184" r="11" />
-          <rect class="body-part" data-region="Elbow" x="55" y="194" width="20" height="52" rx="9" transform="rotate(8 65 220)" />
-          <rect class="body-part" data-region="Elbow" x="185" y="194" width="20" height="52" rx="9" transform="rotate(-8 195 220)" />
-          <ellipse class="body-part" data-region="Wrist & Hand" cx="56" cy="256" rx="12" ry="18" transform="rotate(10 56 256)" />
-          <ellipse class="body-part" data-region="Wrist & Hand" cx="204" cy="256" rx="12" ry="18" transform="rotate(-10 204 256)" />
-          <path class="body-part" data-region="Hip & Groin" d="M96,224 L126,224 L122,302 L92,302 Z" />
-          <path class="body-part" data-region="Hip & Groin" d="M134,224 L164,224 L168,302 L138,302 Z" />
-          <ellipse class="body-part" data-region="Knee Joint" cx="107" cy="310" rx="15" ry="14" />
-          <ellipse class="body-part" data-region="Knee Joint" cx="153" cy="310" rx="15" ry="14" />
-          <path class="body-part" data-region="Knee Joint" d="M93,324 L121,324 L117,384 L97,384 Z" />
-          <path class="body-part" data-region="Knee Joint" d="M139,324 L167,324 L163,384 L143,384 Z" />
-          <ellipse class="body-part" data-region="Ankle & Foot" cx="106" cy="392" rx="13" ry="9" />
-          <ellipse class="body-part" data-region="Ankle & Foot" cx="154" cy="392" rx="13" ry="9" />
-          <path class="body-part" data-region="Ankle & Foot" d="M92,398 L118,398 L116,422 L86,422 Z" />
-          <path class="body-part" data-region="Ankle & Foot" d="M142,398 L168,398 L174,422 L144,422 Z" />
-          <g id="pins-front"></g>
-        </svg>
-
-        <svg id="svg-back" viewBox="0 0 260 430" style="display:none;">
-          <ellipse class="body-part" data-region="Cervical Spine (Neck)" cx="130" cy="42" rx="28" ry="34" />
-          <rect class="body-part" data-region="Cervical Spine (Neck)" x="114" y="74" width="32" height="22" rx="6" />
-          <path class="body-part" data-region="Thoracic Spine (Upper Back)" d="M96,98 L164,98 L158,156 L102,156 Z" />
-          <ellipse class="body-part" data-region="Thoracic Spine (Upper Back)" cx="108" cy="124" rx="15" ry="20" />
-          <ellipse class="body-part" data-region="Thoracic Spine (Upper Back)" cx="152" cy="124" rx="15" ry="20" />
-          <ellipse class="body-part" data-region="Shoulder Complex" cx="84" cy="112" rx="22" ry="16" />
-          <ellipse class="body-part" data-region="Shoulder Complex" cx="176" cy="112" rx="22" ry="16" />
-          <path class="body-part" data-region="Lumbar Spine (Lower Back)" d="M102,156 L158,156 L162,196 L98,196 Z" />
-          <ellipse class="body-part" data-region="Hip & Groin" cx="111" cy="212" rx="18" ry="16" />
-          <ellipse class="body-part" data-region="Hip & Groin" cx="149" cy="212" rx="18" ry="16" />
-          <rect class="body-part" data-region="Shoulder Complex" x="62" y="126" width="22" height="54" rx="10" transform="rotate(6 73 153)" />
-          <rect class="body-part" data-region="Shoulder Complex" x="176" y="126" width="22" height="54" rx="10" transform="rotate(-6 187 153)" />
-          <circle class="body-part" data-region="Elbow" cx="70" cy="184" r="11" />
-          <circle class="body-part" data-region="Elbow" cx="190" cy="184" r="11" />
-          <rect class="body-part" data-region="Elbow" x="55" y="194" width="20" height="52" rx="9" transform="rotate(8 65 220)" />
-          <rect class="body-part" data-region="Elbow" x="185" y="194" width="20" height="52" rx="9" transform="rotate(-8 195 220)" />
-          <ellipse class="body-part" data-region="Wrist & Hand" cx="56" cy="256" rx="12" ry="18" transform="rotate(10 56 256)" />
-          <ellipse class="body-part" data-region="Wrist & Hand" cx="204" cy="256" rx="12" ry="18" transform="rotate(-10 204 256)" />
-          <path class="body-part" data-region="Hip & Groin" d="M95,226 L126,226 L122,302 L92,302 Z" />
-          <path class="body-part" data-region="Hip & Groin" d="M134,226 L165,226 L168,302 L138,302 Z" />
-          <ellipse class="body-part" data-region="Knee Joint" cx="107" cy="310" rx="14" ry="13" />
-          <ellipse class="body-part" data-region="Knee Joint" cx="153" cy="310" rx="14" ry="13" />
-          <path class="body-part" data-region="Knee Joint" d="M93,324 L121,324 L117,384 L97,384 Z" />
-          <path class="body-part" data-region="Knee Joint" d="M139,324 L167,324 L163,384 L143,384 Z" />
-          <ellipse class="body-part" data-region="Ankle & Foot" cx="106" cy="392" rx="13" ry="9" />
-          <ellipse class="body-part" data-region="Ankle & Foot" cx="154" cy="392" rx="13" ry="9" />
-          <rect class="body-part" data-region="Ankle & Foot" x="92" y="400" width="26" height="20" rx="5" />
-          <rect class="body-part" data-region="Ankle & Foot" x="142" y="400" width="26" height="20" rx="5" />
-          <g id="pins-back"></g>
-        </svg>
-      </div>
-
-      <div class="footer-bar">
-        <span>Orange = selected assessment region • Red numbered pins = marked pain spots</span>
-        <span id="pin-summary" class="pin-summary">No pain pins marked yet</span>
-      </div>
-
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
       <script>
-        const selectedSet = new Set({active_json});
-        let currentSide = 'front';
-        const pins = {{ front: [], back: [] }};
+        const activeRegions = new Set({active_json});
+        const container = document.getElementById('wrap');
+        const badgeEl = document.getElementById('badge');
+        const pinReadoutEl = document.getElementById('pin-readout');
 
-        function refreshHighlights() {{
-          document.querySelectorAll('.body-part').forEach(el => {{
-            const reg = el.getAttribute('data-region');
-            if (selectedSet.has(reg)) el.classList.add('selected');
-            else el.classList.remove('selected');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(36, container.clientWidth / container.clientHeight, 0.05, 100);
+        camera.position.set(0, 0.95, 3.35);
+
+        const renderer = new THREE.WebGLRenderer({{ antialias: true, alpha: true }});
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        container.appendChild(renderer.domElement);
+
+        // 3-point clinical studio lighting
+        scene.add(new THREE.AmbientLight(0xE2E8F0, 0.65));
+        const keyLight = new THREE.DirectionalLight(0xFFF7ED, 0.95);
+        keyLight.position.set(2.5, 4.5, 3.5);
+        scene.add(keyLight);
+        const rimLight = new THREE.DirectionalLight(0x93C5FD, 0.55);
+        rimLight.position.set(-2.5, 2.5, -3.5);
+        scene.add(rimLight);
+        const fillLight = new THREE.DirectionalLight(0xCBD5E1, 0.4);
+        fillLight.position.set(0, -2.0, 2.5);
+        scene.add(fillLight);
+
+        // Turntable grid base
+        const gridHelper = new THREE.PolarGridHelper(0.65, 16, 4, 48, 0x334155, 0x1E293B);
+        gridHelper.position.y = 0.0;
+        scene.add(gridHelper);
+
+        const rootGroup = new THREE.Group();
+        scene.add(rootGroup);
+
+        const clickableMeshes = [];
+        const painPinsGroup = new THREE.Group();
+        rootGroup.add(painPinsGroup);
+        const markedPins = [];
+
+        // Normalized anatomical zones (for model height 0.0 to 1.80)
+        const regionZones = [
+          {{ label: "TMJ / Jaw", pos: new THREE.Vector3(0, 1.56, 0.08) }},
+          {{ label: "Cervical Spine (Neck)", pos: new THREE.Vector3(0, 1.46, -0.02) }},
+          {{ label: "Thoracic Spine (Upper Back)", pos: new THREE.Vector3(0, 1.24, -0.09) }},
+          {{ label: "Lumbar Spine (Lower Back)", pos: new THREE.Vector3(0, 0.98, -0.08) }},
+          {{ label: "Shoulder Complex", pos: new THREE.Vector3(-0.22, 1.36, 0) }},
+          {{ label: "Shoulder Complex", pos: new THREE.Vector3( 0.22, 1.36, 0) }},
+          {{ label: "Elbow", pos: new THREE.Vector3(-0.28, 1.10, -0.02) }},
+          {{ label: "Elbow", pos: new THREE.Vector3( 0.28, 1.10, -0.02) }},
+          {{ label: "Wrist & Hand", pos: new THREE.Vector3(-0.33, 0.84, 0.02) }},
+          {{ label: "Wrist & Hand", pos: new THREE.Vector3( 0.33, 0.84, 0.02) }},
+          {{ label: "Hip & Groin", pos: new THREE.Vector3(-0.11, 0.86, 0) }},
+          {{ label: "Hip & Groin", pos: new THREE.Vector3( 0.11, 0.86, 0) }},
+          {{ label: "Knee Joint", pos: new THREE.Vector3(-0.10, 0.48, 0.03) }},
+          {{ label: "Knee Joint", pos: new THREE.Vector3( 0.10, 0.48, 0.03) }},
+          {{ label: "Ankle & Foot", pos: new THREE.Vector3(-0.10, 0.08, 0.04) }},
+          {{ label: "Ankle & Foot", pos: new THREE.Vector3( 0.10, 0.08, 0.04) }},
+        ];
+
+        function addSelectedRegionGlows() {{
+          regionZones.forEach(z => {{
+            if (activeRegions.has(z.label)) {{
+              const halo = new THREE.Mesh(
+                new THREE.SphereGeometry(0.055, 16, 16),
+                new THREE.MeshBasicMaterial({{ color: 0xF47920, transparent: true, opacity: 0.48 }})
+              );
+              halo.position.copy(z.pos);
+              rootGroup.add(halo);
+            }}
           }});
         }}
 
-        function setSide(side) {{
-          currentSide = side;
-          document.getElementById('svg-front').style.display = side === 'front' ? 'block' : 'none';
-          document.getElementById('svg-back').style.display = side === 'back' ? 'block' : 'none';
-          document.getElementById('btn-front').classList.toggle('active', side === 'front');
-          document.getElementById('btn-back').classList.toggle('active', side === 'back');
+        function buildFallbackSculptedHuman() {{
+          const skinMat = new THREE.MeshStandardMaterial({{
+            color: 0xD6B098, roughness: 0.46, metalness: 0.04
+          }});
+          function lathe(pts, x, y, z, sx=1, sy=1, sz=1, rz=0) {{
+            const g = new THREE.LatheGeometry(pts.map(p => new THREE.Vector2(p[0], p[1])), 28);
+            const m = new THREE.Mesh(g, skinMat);
+            m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.rotation.z = rz;
+            rootGroup.add(m); clickableMeshes.push(m);
+          }}
+          function sphere(r, x, y, z, sx=1, sy=1, sz=1) {{
+            const m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 20), skinMat);
+            m.position.set(x, y, z); m.scale.set(sx, sy, sz);
+            rootGroup.add(m); clickableMeshes.push(m);
+          }}
+          sphere(0.115, 0, 1.66, 0, 0.9, 1.15, 1.0);
+          sphere(0.085, 0, 1.56, 0.03, 0.85, 0.85, 0.9);
+          lathe([[0.058,0],[0.054,0.08],[0.062,0.16]], 0, 1.40, 0);
+          lathe([[0.12,0],[0.16,0.12],[0.135,0.28],[0.175,0.48],[0.185,0.58],[0.12,0.65]], 0, 0.78, 0, 1.08, 1, 0.65);
+          [-1,1].forEach(s => {{
+            sphere(0.068, s*0.21, 1.36, 0);
+            lathe([[0.04,0],[0.052,0.25]], s*0.25, 1.11, 0, 1,1,1, -s*0.12);
+            lathe([[0.028,0],[0.04,0.24]], s*0.30, 0.86, 0.02, 1,1,1, -s*0.10);
+            lathe([[0.05,0],[0.082,0.38]], s*0.095, 0.47, 0);
+            lathe([[0.036,0],[0.052,0.38]], s*0.095, 0.08, -0.01);
+            sphere(0.04, s*0.095, 0.03, 0.045, 0.9, 0.5, 1.8);
+          }});
+          addSelectedRegionGlows();
         }}
 
-        function renderPins() {{
-          ['front', 'back'].forEach(side => {{
-            const g = document.getElementById('pins-' + side);
-            g.innerHTML = '';
-            pins[side].forEach((p, idx) => {{
-              const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-              ring.setAttribute('cx', p.x); ring.setAttribute('cy', p.y); ring.setAttribute('r', '10');
-              ring.setAttribute('class', 'pin-ring');
+        // Load genuine 3D human character GLB model via Three.js GLTFLoader
+        const loader = new THREE.GLTFLoader();
+        const glbUrl = "https://threejs.org/examples/models/gltf/Michelle.glb";
 
-              const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-              dot.setAttribute('cx', p.x); dot.setAttribute('cy', p.y); dot.setAttribute('r', '7');
-              dot.setAttribute('class', 'pin-dot');
+        loader.load(
+          glbUrl,
+          function(gltf) {{
+            const model = gltf.scene;
+            const box = new THREE.Box3().setFromObject(model);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            const scaleFactor = 1.76 / (size.y || 1);
+            model.scale.setScalar(scaleFactor);
 
-              const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-              txt.setAttribute('x', p.x); txt.setAttribute('y', p.y + 0.5);
-              txt.setAttribute('class', 'pin-num');
-              txt.textContent = String(idx + 1);
+            const scaledBox = new THREE.Box3().setFromObject(model);
+            const center = new THREE.Vector3();
+            scaledBox.getCenter(center);
+            model.position.x = -center.x;
+            model.position.z = -center.z;
+            model.position.y = -scaledBox.min.y;
 
-              g.appendChild(ring); g.appendChild(dot); g.appendChild(txt);
+            const clinicalMat = new THREE.MeshStandardMaterial({{
+              color: 0xCBD5E1,
+              roughness: 0.45,
+              metalness: 0.08
             }});
-          }});
 
-          const allLabels = [
-            ...pins.front.map((p, i) => `#${{i+1}} Front: ${{p.label}}`),
-            ...pins.back.map((p, i) => `#${{i+1}} Back: ${{p.label}}`)
-          ];
-          document.getElementById('pin-summary').textContent =
-            allLabels.length ? allLabels.join(' | ') : 'No pain pins marked yet';
+            model.traverse(child => {{
+              if (child.isMesh) {{
+                child.material = clinicalMat;
+                clickableMeshes.push(child);
+              }}
+            }});
+
+            rootGroup.add(model);
+            addSelectedRegionGlows();
+            badgeEl.textContent = "3D Human Anatomy Loaded • Click body to mark pain";
+          }},
+          undefined,
+          function() {{
+            buildFallbackSculptedHuman();
+          }}
+        );
+
+        function classifyPoint(pt) {{
+          let best = regionZones[0].label;
+          let minD = Infinity;
+          regionZones.forEach(z => {{
+            const d = pt.distanceTo(z.pos);
+            if (d < minD) {{ minD = d; best = z.label; }}
+          }});
+          const lr = pt.x < -0.035 ? "Left " : (pt.x > 0.035 ? "Right " : "Central ");
+          const ap = pt.z < -0.025 ? "Posterior " : (pt.z > 0.025 ? "Anterior " : "");
+          return `${{lr}}${{ap}}${{best}}`;
         }}
 
-        function clearAllPins() {{
-          pins.front = [];
-          pins.back = [];
-          renderPins();
-          document.getElementById('hover-readout').textContent = 'Pins cleared';
+        function dropPainPin(localPt) {{
+          const num = markedPins.length + 1;
+          const pinCore = new THREE.Mesh(
+            new THREE.SphereGeometry(0.024, 16, 16),
+            new THREE.MeshStandardMaterial({{ color: 0xEF4444, emissive: 0xB91C1C, roughness: 0.2 }})
+          );
+          pinCore.position.copy(localPt);
+
+          const pinRing = new THREE.Mesh(
+            new THREE.SphereGeometry(0.044, 16, 16),
+            new THREE.MeshBasicMaterial({{ color: 0xF47920, transparent: true, opacity: 0.45 }})
+          );
+          pinRing.position.copy(localPt);
+
+          painPinsGroup.add(pinCore);
+          painPinsGroup.add(pinRing);
+
+          const desc = `#${{num}} ${{classifyPoint(localPt)}}`;
+          markedPins.push(desc);
+          badgeEl.textContent = "Marked: " + desc;
+          pinReadoutEl.textContent = "Pain pins (" + markedPins.length + "): " + markedPins.slice(-2).join(" | ");
         }}
 
-        document.querySelectorAll('.body-part').forEach(el => {{
-          el.addEventListener('mouseenter', () => {{
-            const reg = el.getAttribute('data-region');
-            document.getElementById('hover-readout').textContent = reg;
-          }});
-          el.addEventListener('click', evt => {{
-            const svg = el.ownerSVGElement;
-            const pt = svg.createSVGPoint();
-            pt.x = evt.clientX; pt.y = evt.clientY;
-            const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
-            const reg = el.getAttribute('data-region');
-            const sideText = currentSide === 'front' ? 'Anterior' : 'Posterior';
-            const latText = svgP.x < 122 ? 'Left ' : (svgP.x > 138 ? 'Right ' : '');
-            const desc = `${{latText}}${{sideText}} ${{reg}}`;
+        window.clearPins = function() {{
+          while (painPinsGroup.children.length > 0) {{
+            painPinsGroup.remove(painPinsGroup.children[0]);
+          }}
+          markedPins.length = 0;
+          badgeEl.textContent = "Pain pins cleared";
+          pinReadoutEl.textContent = "Pain pins: 0";
+        }};
 
-            pins[currentSide].push({{ x: svgP.x.toFixed(1), y: svgP.y.toFixed(1), label: desc }});
-            renderPins();
-            document.getElementById('hover-readout').textContent = `Pinned: ${{desc}}`;
-          }});
+        window.setAngle = function(radY) {{
+          rootGroup.rotation.y = radY;
+          rootGroup.rotation.x = 0;
+        }};
+
+        let dragging = false, moved = false, prevX = 0, prevY = 0;
+        renderer.domElement.addEventListener('pointerdown', e => {{
+          dragging = true; moved = false; prevX = e.clientX; prevY = e.clientY;
+        }});
+        window.addEventListener('pointerup', () => {{ dragging = false; }});
+
+        renderer.domElement.addEventListener('wheel', e => {{
+          e.preventDefault();
+          camera.position.z = Math.max(1.75, Math.min(4.8, camera.position.z + e.deltaY * 0.002));
+        }}, {{ passive: false }});
+
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+
+        renderer.domElement.addEventListener('pointermove', e => {{
+          if (!dragging) return;
+          const dx = e.clientX - prevX;
+          const dy = e.clientY - prevY;
+          if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved = true;
+          rootGroup.rotation.y += dx * 0.012;
+          rootGroup.rotation.x = Math.max(-0.4, Math.min(0.4, rootGroup.rotation.x + dy * 0.008));
+          prevX = e.clientX; prevY = e.clientY;
         }});
 
-        refreshHighlights();
+        renderer.domElement.addEventListener('click', e => {{
+          if (moved) return;
+          const rect = renderer.domElement.getBoundingClientRect();
+          pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+          pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+          raycaster.setFromCamera(pointer, camera);
+          const hits = raycaster.intersectObjects(clickableMeshes, true);
+          if (hits.length > 0) {{
+            const localPt = rootGroup.worldToLocal(hits[0].point.clone());
+            dropPainPin(localPt);
+          }}
+        }});
+
+        function animate() {{
+          requestAnimationFrame(animate);
+          renderer.render(scene, camera);
+        }}
+        animate();
       </script>
     </body>
     </html>
     """
-  components.html(html_code, height=462)
+  components.html(html_code, height=508)
 
 
 def generate_gemini_protocol(api_key, context_payload):
@@ -829,7 +914,7 @@ k2.metric("Assessments Completed", len(assessments_all))
 k3.metric("Treatment Sessions Logged", len(logs_all))
 
 # =====================================================================
-# 1. CLINICAL ASSESSMENT (BODY CHART + FULL CRITERIA + GEMINI AI)
+# 1. CLINICAL ASSESSMENT (TRUE 3D HUMAN MODEL + GEMINI AI)
 # =====================================================================
 if menu == "Clinical Assessment":
   pid_col = col_val(patients_all, ["patient_id", "Patient_ID"])
@@ -856,16 +941,16 @@ if menu == "Clinical Assessment":
           ):
             st.dataframe(p_asm, width="stretch", hide_index=True)
 
-    # --- STEP 1: INTERACTIVE BODY CHART & PAIN MARKING ---
+    # --- STEP 1: TRUE 3D HUMAN MODEL & PAIN MARKING ---
     st.markdown(
-        '<div class="ui-card"><div class="section-heading">1. Anterior &'
-        " Posterior Pain Chart & Region Selection</div>",
+        '<div class="ui-card"><div class="section-heading">1. 3D Anatomical'
+        " Pain Map & Region Selection</div>",
         unsafe_allow_html=True,
     )
-    col_map, col_reg = st.columns([1.08, 1.22])
+    col_map, col_reg = st.columns([1.12, 1.18])
 
     with col_map:
-      render_interactive_body_chart(st.session_state["asm_body_parts"])
+      render_true_3d_human_model(st.session_state["asm_body_parts"])
 
     with col_reg:
       body_parts = st.multiselect(
