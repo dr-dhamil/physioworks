@@ -197,7 +197,7 @@ except Exception as e:
 # --- GEMINI AI SETUP ---
 GEMINI_API_KEY = None
 try:
-  GEMINI_API_KEY = st.secrets.get("AQ.Ab8RN6K8v43Zwcg1AOS6F9rd4G692dA3x4bip7ImhmTBuHFsGA")
+  GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY")
 except Exception:
   GEMINI_API_KEY = None
 
